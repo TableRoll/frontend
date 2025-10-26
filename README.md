@@ -1,6 +1,56 @@
-# D&D Map App
+# D&D Campaign Management System
 
-A client-side web application for managing D&D maps, tokens, and audio playlists. Built with React, TypeScript, and modern web technologies.
+A comprehensive web application for managing D&D campaigns, maps, tokens, characters, and audio playlists. Built with React, TypeScript, Node.js, and PostgreSQL.
+
+## 🐳 Docker Support
+
+This application is fully containerized and can be run with Docker for easy deployment and development.
+
+### Quick Start with Docker
+
+```bash
+# Production environment
+docker-compose up -d
+
+# Development environment
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+**Access Points:**
+- Frontend: http://localhost:3000
+- API: http://localhost:3001
+- Database: localhost:5432
+
+For detailed Docker instructions, see [DOCKER_GUIDE.md](DOCKER_GUIDE.md).
+
+### Alternative: Windows Batch Script
+
+```cmd
+# Start production
+docker-start.bat prod
+
+# Start development
+docker-start.bat dev
+
+# Stop all services
+docker-start.bat stop
+```
+
+### Alternative: Make Commands
+
+```bash
+# Production
+make prod
+
+# Development
+make dev
+
+# View logs
+make logs
+
+# Check status
+make status
+```
 
 ## Features
 

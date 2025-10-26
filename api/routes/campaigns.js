@@ -164,7 +164,7 @@ router.post('/', authenticateToken, [
       INSERT INTO campaigns (name, description, owner_id)
       VALUES ($1, $2, $3)
       RETURNING *
-    `, [name, description || '', req.user.userId]);
+    `, [name, description || '', req.user.id]);
 
     const campaign = result.rows[0];
 

@@ -217,3 +217,4 @@ The chat is integrated into the MapCanvas component:
 *The chat feature is designed to grow with the application, starting as a local communication tool and evolving into a full real-time multiplayer chat system.*
 
 
+
