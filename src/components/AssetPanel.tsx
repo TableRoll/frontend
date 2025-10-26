@@ -36,6 +36,7 @@ import {
 } from '@tabler/icons-react';
 import { useMapStore } from '../stores/mapStore';
 import { Asset, AssetType } from '../types/models';
+import { assetsAPI } from '../services/api';
 
 interface AssetPanelProps {
   assets: Asset[];
@@ -50,7 +51,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
   onAssetUpload,
   onAssetDelete
 }) => {
-  const { addAsset } = useMapStore();
+  const { addAsset, currentCampaign } = useMapStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<AssetType | 'all'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -80,12 +81,6 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        // Create thumbnail for images
-        let thumbnail = '';
-        if (file.type.startsWith('image/')) {
-          thumbnail = await createThumbnail(file);
-        }
-        
         // Determine asset type
         let assetType: AssetType = 'image'; // Default to image
         if (file.type.startsWith('image/')) {
@@ -96,17 +91,17 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
           assetType = 'map';
         }
         
-        // Create asset object
-        const newAsset: Asset = {
-          id: assetId,
+        // Upload to API
+        const response = await assetsAPI.upload(file, {
           name: file.name,
-          type: assetType,
-          url: URL.createObjectURL(file), // In real app, this would be server URL
-          thumbnail,
-          size: file.size,
-          uploadedAt: new Date()
-        };
+          assetType,
+          campaignId: currentCampaign?.id,
+          isPublic: false
+        });
         
+        const newAsset = response.asset;
+        
+        // Add to local store
         addAsset(newAsset);
         onAssetUpload([file]);
         
@@ -122,40 +117,9 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
     }
     
     setUploadingFiles([]);
-  }, [addAsset, onAssetUpload]);
+  }, [addAsset, onAssetUpload, currentCampaign]);
 
-  // Create thumbnail for images
-  const createThumbnail = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = document.createElement('img');
-      
-      img.onload = () => {
-        const maxSize = 150;
-        let { width, height } = img;
-        
-        if (width > height) {
-          if (width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL());
-      };
-      
-      img.src = URL.createObjectURL(file);
-    });
-  };
+  // Thumbnails are now handled by the API
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';

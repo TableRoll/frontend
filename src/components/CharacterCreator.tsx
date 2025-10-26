@@ -33,11 +33,11 @@ import {
   CharacterClass,
   CharacterBackground,
   AbilityScores,
-  Equipment,
   ArmorType,
   WeaponType,
   BackpackType
 } from '../types/models';
+import { charactersAPI } from '../services/api';
 
 interface CharacterCreatorProps {
   opened: boolean;
@@ -288,74 +288,51 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
     }
   };
 
-  const handleCreateCharacter = () => {
+  const handleCreateCharacter = async () => {
     if (!selectedRace || !selectedClass || !characterName || !selectedBackground) {
       return;
     }
 
-    // Calculate final ability scores with all bonuses
-    const finalAbilityScores: AbilityScores = {
-      strength: getTotalAbilityScore('strength'),
-      dexterity: getTotalAbilityScore('dexterity'),
-      constitution: getTotalAbilityScore('constitution'),
-      intelligence: getTotalAbilityScore('intelligence'),
-      wisdom: getTotalAbilityScore('wisdom'),
-      charisma: getTotalAbilityScore('charisma')
-    };
+    try {
+      // Calculate final ability scores with all bonuses
+      const finalAbilityScores: AbilityScores = {
+        strength: getTotalAbilityScore('strength'),
+        dexterity: getTotalAbilityScore('dexterity'),
+        constitution: getTotalAbilityScore('constitution'),
+        intelligence: getTotalAbilityScore('intelligence'),
+        wisdom: getTotalAbilityScore('wisdom'),
+        charisma: getTotalAbilityScore('charisma')
+      };
 
-    const equipment: Equipment = {
-      armor: selectedArmor !== 'none' ? {
-        type: selectedArmor,
-        name: armorOptions[selectedArmor].name,
-        armorClass: armorOptions[selectedArmor].ac
-      } : undefined,
-      mainWeapon: selectedMainWeapon ? {
-        type: selectedMainWeapon,
-        name: weaponOptions[selectedMainWeapon].name,
-        damage: weaponOptions[selectedMainWeapon].damage
-      } : undefined,
-      rangedWeapon: selectedRangedWeapon ? {
-        type: selectedRangedWeapon,
-        name: weaponOptions[selectedRangedWeapon].name,
-        damage: weaponOptions[selectedRangedWeapon].damage,
-        range: '80/320'
-      } : undefined,
-      backpack: {
-        type: selectedBackpack,
-        name: backpackOptions[selectedBackpack].name,
-        items: []
-      }
-    };
+      // Equipment will be handled by the API based on class/background
 
-    const character: Character = {
-      id: `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: characterName,
-      race: selectedRace,
-      class: selectedClass,
-      level: 1,
-      abilityScores: finalAbilityScores,
-      equipment,
-      background: selectedBackground,
-      description,
-      avatar,
-      maxHp: calculateHP(),
-      currentHp: calculateHP(),
-      hp: {
-        current: calculateHP(),
-        max: calculateHP(),
-        temporary: 0
-      },
-      armorClass: calculateAC(),
-      speed: 30,
-      initiative: calculateModifier(finalAbilityScores.dexterity),
-      proficiencyBonus: 2,
-      startingGold: getStartingGold(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      const characterData = {
+        name: characterName,
+        description,
+        imageUrl: avatar,
+        campaignId,
+        raceId: selectedRace, // This should be the race ID from the API
+        classId: selectedClass, // This should be the class ID from the API
+        backgroundId: selectedBackground, // This should be the background ID from the API
+        level: 1,
+        abilityScores: finalAbilityScores,
+        hpMax: calculateHP(),
+        armorClass: calculateAC(),
+        speed: 30,
+        size: 'medium'
+      };
 
-    onSave(character);
-    handleClose();
+      // Create character via API
+      const response = await charactersAPI.create(characterData);
+      const character = response.character;
+
+      // Call the onSave callback with the created character
+      onSave(character);
+      handleClose();
+    } catch (error) {
+      console.error('Failed to create character:', error);
+      // You might want to show an error message to the user here
+    }
   };
 
   const handleClose = () => {

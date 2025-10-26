@@ -44,7 +44,9 @@ import { useMapStore } from '../stores/mapStore';
 import { Map, Campaign } from '../types/models';
 import { formatDate } from '../utils/dateUtils';
 import { CharacterCreator } from './CharacterCreator';
+import { campaignsAPI } from '../services/api';
 import { notifications } from '@mantine/notifications';
+import { APITest } from './APITest';
 
 // Map Preview Component with Grid Overlay
 interface MapPreviewProps {
@@ -227,25 +229,37 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleCreateCampaign = () => {
+  const handleCreateCampaign = async () => {
     if (newCampaign.name && selectedMap) {
-      const campaign: Campaign = {
-        id: `campaign_${Date.now()}`,
-        name: newCampaign.name,
-        mapId: selectedMap.id,
-        tokens: [],
-        active: false,
-        description: newCampaign.description,
-        sessionNumber: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastPlayedAt: undefined,
-        mapTokenHistory: {}
-      };
-      addCampaign(campaign);
-      setNewCampaign({});
-      setSelectedMap(null);
-      setCampaignModalOpened(false);
+      try {
+        const campaignData = {
+          name: newCampaign.name,
+          description: newCampaign.description,
+          currentMapId: selectedMap.id
+        };
+        
+        const response = await campaignsAPI.create(campaignData);
+        const campaign = response.campaign;
+        
+        // Add to local store
+        addCampaign(campaign);
+        setNewCampaign({});
+        setSelectedMap(null);
+        setCampaignModalOpened(false);
+        
+        notifications.show({
+          title: 'Campaign Created',
+          message: `${campaign.name} has been created successfully`,
+          color: 'green'
+        });
+      } catch (error) {
+        console.error('Failed to create campaign:', error);
+        notifications.show({
+          title: 'Error',
+          message: 'Failed to create campaign. Please try again.',
+          color: 'red'
+        });
+      }
     }
   };
 
@@ -1018,6 +1032,9 @@ export const Dashboard: React.FC = () => {
         }}
         campaignId={currentCampaign?.id || 'default_campaign'}
       />
+
+      {/* API Test Component - Remove this in production */}
+      <APITest />
       </Container>
     </ScrollArea>
   );

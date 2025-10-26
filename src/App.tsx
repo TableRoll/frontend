@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
 import { AppShell } from './components/AppShell';
 import { AuthWrapper } from './components/AuthWrapper';
-import { useMapStore } from './stores/mapStore';
+import { useMapStore } from './stores/mapStoreWithAPI';
 import { MapCanvas } from './components/MapCanvas';
 import { TokenLayer } from './components/TokenLayer';
 import { AssetPanel } from './components/AssetPanel';
@@ -39,8 +39,26 @@ function App() {
     assets,
     moveToken,
     selectTokens,
-    updateViewport
+    updateViewport,
+    loadCampaigns,
+    loadCharacters,
+    loadAssets
   } = useMapStore();
+
+  // Load data on app startup
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        await loadCampaigns();
+        await loadCharacters();
+        await loadAssets();
+      } catch (error) {
+        console.error('Failed to load initial data:', error);
+      }
+    };
+
+    loadInitialData();
+  }, [loadCampaigns, loadCharacters, loadAssets]);
 
   // Handle token movement
   const handleTokenMove = (event: TokenMoveEvent) => {
@@ -54,7 +72,7 @@ function App() {
 
   // Handle viewport changes
   const handleViewportChange = (event: ViewportChangeEvent) => {
-    updateViewport(event);
+    updateViewport(event.viewport);
   };
 
   // Handle asset selection
