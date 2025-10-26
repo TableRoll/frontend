@@ -1,69 +1,116 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Box,
-  Stack,
-  TextInput,
-  ScrollArea,
-  Text,
-  Group,
-  ActionIcon,
-  Badge,
-  Divider,
   Paper,
-  Tooltip
+  TextInput,
+  Button,
+  ScrollArea,
+  Group,
+  Text,
+  Stack,
+  Badge,
+  ActionIcon,
+  Menu,
+  Modal,
+  Textarea
 } from '@mantine/core';
 import {
   IconSend,
-  IconX,
-  IconChevronRight,
-  IconChevronLeft
+  IconMessage,
+  IconDice,
+  IconSettings,
+  IconTrash,
+  IconUser
 } from '@tabler/icons-react';
+import { useAuthStore } from '../stores/authStore';
 
-interface Message {
+interface ChatMessage {
   id: string;
-  text: string;
-  sender: string;
+  userId: string;
+  username: string;
+  message: string;
   timestamp: Date;
-  isSystem?: boolean;
+  type: 'message' | 'roll' | 'system';
+  rollResult?: {
+    dice: string;
+    result: number;
+    rolls: number[];
+  };
 }
 
 interface ChatProps {
-  isGM?: boolean;
+  height?: number;
 }
 
-export const Chat: React.FC<ChatProps> = ({ isGM = false }) => {
-  const [messages, setMessages] = useState<Message[]>([
+export const Chat: React.FC<ChatProps> = ({ height = 400 }) => {
+  const { user } = useAuthStore();
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
-      text: 'Welcome to the game! Use this chat to communicate with other players.',
-      sender: 'System',
+      userId: 'system',
+      username: 'System',
+      message: 'Welcome to the chat! Use /roll to roll dice (e.g., /roll 1d20+5)',
       timestamp: new Date(),
-      isSystem: true
+      type: 'system'
     }
   ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [newMessage, setNewMessage] = useState('');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (inputValue.trim()) {
-      const newMessage: Message = {
-        id: `msg_${Date.now()}`,
-        text: inputValue.trim(),
-        sender: isGM ? 'Game Master' : 'Player',
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, newMessage]);
-      setInputValue('');
+  const rollDice = (diceString: string): { dice: string; result: number; rolls: number[] } => {
+    // Parse dice string (e.g., "1d20+5", "2d6", "1d4-1")
+    const match = diceString.match(/(\d+)d(\d+)([+-]\d+)?/);
+    if (!match) {
+      throw new Error(`Invalid dice format: ${diceString}`);
     }
+    
+    const count = parseInt(match[1]);
+    const sides = parseInt(match[2]);
+    const modifier = match[3] ? parseInt(match[3]) : 0;
+    
+    const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
+    const result = rolls.reduce((sum, roll) => sum + roll, 0) + modifier;
+    
+    return { dice: diceString, result, rolls };
+  };
+
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || !user) return;
+
+    let messageType: 'message' | 'roll' | 'system' = 'message';
+    let rollResult: ChatMessage['rollResult'] = undefined;
+
+    // Check if it's a dice roll command
+    if (newMessage.startsWith('/roll ')) {
+      try {
+        const diceString = newMessage.substring(6).trim();
+        rollResult = rollDice(diceString);
+        messageType = 'roll';
+      } catch (error) {
+        // If roll parsing fails, treat as regular message
+        messageType = 'message';
+      }
+    }
+
+    const message: ChatMessage = {
+      id: Date.now().toString(),
+      userId: user.id,
+      username: user.displayName,
+      message: newMessage,
+      timestamp: new Date(),
+      type: messageType,
+      rollResult
+    };
+
+    setMessages(prev => [...prev, message]);
+    setNewMessage('');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -73,171 +120,128 @@ export const Chat: React.FC<ChatProps> = ({ isGM = false }) => {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+  const clearChat = () => {
+    setMessages([
+      {
+        id: '1',
+        userId: 'system',
+        username: 'System',
+        message: 'Chat cleared',
+        timestamp: new Date(),
+        type: 'system'
+      }
+    ]);
   };
 
-  if (isCollapsed) {
-    return (
-      <Box
-        style={{
-          position: 'fixed',
-          right: 0,
-          top: '60px',
-          bottom: 0,
-          width: '40px',
-          backgroundColor: '#f8f9fa',
-          borderLeft: '1px solid #dee2e6',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          cursor: 'pointer'
-        }}
-        onClick={() => setIsCollapsed(false)}
-      >
-        <Tooltip label="Open Chat" position="left">
-          <ActionIcon variant="subtle" size="lg">
-            <IconChevronLeft size={20} />
-          </ActionIcon>
-        </Tooltip>
-      </Box>
-    );
-  }
+  const formatTimestamp = (timestamp: Date): string => {
+    return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getMessageColor = (messageType: string): string => {
+    switch (messageType) {
+      case 'roll': return 'blue';
+      case 'system': return 'gray';
+      default: return 'dark';
+    }
+  };
 
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        right: 0,
-        top: '60px',
-        bottom: 0,
-        width: '320px',
-        backgroundColor: '#ffffff',
-        borderLeft: '1px solid #dee2e6',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 100
-      }}
-    >
-      {/* Chat Header */}
-      <Box
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid #dee2e6',
-          backgroundColor: '#f8f9fa'
-        }}
-      >
+    <Paper withBorder p="md" h={height || '100%'} style={{ flex: 1 }}>
+      <Stack gap="sm" h="100%">
+        {/* Header */}
         <Group justify="space-between">
           <Group gap="xs">
-            <Text size="sm" fw={600}>Chat</Text>
-            <Badge size="sm" color="blue" variant="light">
-              {messages.filter(m => !m.isSystem).length}
+            <IconMessage size={20} />
+            <Text fw={600}>Chat</Text>
+            <Badge size="sm" color="green">
+              {messages.length - 1} messages
             </Badge>
           </Group>
-          <Tooltip label="Collapse Chat">
-            <ActionIcon 
-              variant="subtle" 
-              size="sm"
-              onClick={() => setIsCollapsed(true)}
-            >
-              <IconChevronRight size={16} />
-            </ActionIcon>
-          </Tooltip>
+          <Menu>
+            <Menu.Target>
+              <ActionIcon variant="subtle">
+                <IconSettings size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconTrash size={14} />}
+                color="red"
+                onClick={clearChat}
+              >
+                Clear Chat
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
-      </Box>
 
-      {/* Messages Area */}
-      <ScrollArea
-        style={{ flex: 1 }}
-        viewportRef={scrollRef}
-        scrollbarSize={8}
-      >
-        <Stack gap="sm" p="md">
-          {messages.map((message) => (
-            <Box key={message.id}>
-              {message.isSystem ? (
-                <Paper
-                  p="xs"
-                  style={{
-                    backgroundColor: '#e7f5ff',
-                    border: '1px solid #339af0',
-                    borderRadius: '8px'
-                  }}
-                >
-                  <Text size="xs" c="blue" ta="center">
-                    {message.text}
+        {/* Messages */}
+        <ScrollArea h="100%" ref={scrollAreaRef}>
+          <Stack gap="xs">
+            {messages.map((message) => (
+              <Paper
+                key={message.id}
+                p="sm"
+                withBorder
+                style={{
+                  backgroundColor: message.type === 'system' ? '#f8f9fa' : undefined
+                }}
+              >
+                <Group justify="space-between" mb="xs">
+                  <Group gap="xs">
+                    <IconUser size={14} />
+                    <Text size="sm" fw={500} c={getMessageColor(message.type)}>
+                      {message.username}
+                    </Text>
+                    {message.type === 'roll' && (
+                      <Badge size="xs" color="blue" leftSection={<IconDice size={10} />}>
+                        Roll
+                      </Badge>
+                    )}
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    {formatTimestamp(message.timestamp)}
                   </Text>
-                </Paper>
-              ) : (
-                <Box>
-                  <Group gap="xs" mb={4}>
-                    <Text size="xs" fw={600} c="dark">
-                      {message.sender}
+                </Group>
+                
+                <Text size="sm">{message.message}</Text>
+                
+                {message.rollResult && (
+                  <Group gap="xs" mt="xs">
+                    <Badge color="blue" variant="light">
+                      {message.rollResult.dice}
+                    </Badge>
+                    <Text size="sm" fw={600}>
+                      = {message.rollResult.result}
                     </Text>
                     <Text size="xs" c="dimmed">
-                      {formatTime(message.timestamp)}
+                      ({message.rollResult.rolls.join(', ')})
                     </Text>
                   </Group>
-                  <Paper
-                    p="xs"
-                    style={{
-                      backgroundColor: message.sender === 'Game Master' ? '#f3f0ff' : '#f8f9fa',
-                      borderRadius: '8px',
-                      border: '1px solid #e9ecef'
-                    }}
-                  >
-                    <Text size="sm" style={{ wordBreak: 'break-word' }}>
-                      {message.text}
-                    </Text>
-                  </Paper>
-                </Box>
-              )}
-            </Box>
-          ))}
-        </Stack>
-      </ScrollArea>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </ScrollArea>
 
-      <Divider />
-
-      {/* Input Area */}
-      <Box p="md">
-        <Group gap="xs" align="flex-end">
+        {/* Input */}
+        <Group gap="xs">
           <TextInput
-            placeholder="Type a message..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyPress}
+            placeholder="Type a message... (use /roll 1d20+5 for dice rolls)"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
             style={{ flex: 1 }}
-            size="sm"
-            styles={{
-              input: {
-                borderRadius: '8px'
-              }
-            }}
           />
-          <Tooltip label="Send Message (Enter)">
-            <ActionIcon
-              size="lg"
-              variant="filled"
-              color="blue"
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
-              style={{ borderRadius: '8px' }}
-            >
-              <IconSend size={18} />
-            </ActionIcon>
-          </Tooltip>
+          <Button
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim()}
+            leftSection={<IconSend size={16} />}
+          >
+            Send
+          </Button>
         </Group>
-        <Text size="xs" c="dimmed" mt="xs">
-          Press Enter to send • Future: Real-time multiplayer chat
-        </Text>
-      </Box>
-    </Box>
+      </Stack>
+    </Paper>
   );
 };
-
-

@@ -1,215 +1,142 @@
 import React, { useState } from 'react';
 import {
+  Container,
   Paper,
   TextInput,
   PasswordInput,
   Button,
-  Stack,
   Title,
   Text,
-  Alert,
-  Anchor,
+  Stack,
   Group,
-  Divider,
-  Box
+  Alert,
+  Divider
 } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconUserPlus, IconEye, IconEyeOff } from '@tabler/icons-react';
-import { useAuthStore } from '../stores/authStore';
-import { RegisterCredentials } from '../types/models';
+import { IconAlertCircle, IconUserPlus, IconArrowLeft } from '@tabler/icons-react';
+import { useAuthStore, RegisterCredentials } from '../stores/authStore';
 
 interface RegisterFormProps {
-  onSwitchToLogin: () => void;
-  onRegisterSuccess?: () => void;
+  onBackToLogin?: () => void;
 }
 
-export const RegisterForm: React.FC<RegisterFormProps> = ({ 
-  onSwitchToLogin, 
-  onRegisterSuccess 
-}) => {
+export const RegisterForm: React.FC<RegisterFormProps> = ({ onBackToLogin }) => {
   const { register, isLoading, error, clearError } = useAuthStore();
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const form = useForm<RegisterCredentials>({
-    initialValues: {
-      email: '',
-      username: '',
-      displayName: '',
-      password: '',
-      confirmPassword: ''
-    },
-    validate: {
-      email: (value) => {
-        if (!value) return 'Email is required';
-        if (!/^\S+@\S+\.\S+$/.test(value)) return 'Invalid email format';
-        return null;
-      },
-      username: (value) => {
-        if (!value) return 'Username is required';
-        if (value.length < 3) return 'Username must be at least 3 characters';
-        if (!/^[a-zA-Z0-9_]+$/.test(value)) return 'Username can only contain letters, numbers, and underscores';
-        return null;
-      },
-      displayName: (value) => {
-        if (!value) return 'Display name is required';
-        if (value.length < 2) return 'Display name must be at least 2 characters';
-        return null;
-      },
-      password: (value) => {
-        if (!value) return 'Password is required';
-        if (value.length < 6) return 'Password must be at least 6 characters';
-        if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value)) {
-          return 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
-        }
-        return null;
-      },
-      confirmPassword: (value, values) => {
-        if (!value) return 'Please confirm your password';
-        if (value !== values.password) return 'Passwords do not match';
-        return null;
-      }
-    }
+  const [formData, setFormData] = useState<RegisterCredentials>({
+    email: '',
+    username: '',
+    displayName: '',
+    password: '',
+    confirmPassword: ''
   });
 
-  const handleSubmit = async (values: RegisterCredentials) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    
+    if (formData.password !== formData.confirmPassword) {
+      return;
+    }
+    
     try {
-      clearError();
-      await register(values);
-      notifications.show({
-        title: 'Welcome!',
-        message: 'Your account has been created successfully.',
-        color: 'green'
-      });
-      onRegisterSuccess?.();
+      await register(formData);
     } catch (error) {
-      notifications.show({
-        title: 'Registration failed',
-        message: error instanceof Error ? error.message : 'An error occurred',
-        color: 'red'
-      });
+      // Error is handled by the store
     }
   };
 
+  const handleInputChange = (field: keyof RegisterCredentials) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const passwordsMatch = formData.password === formData.confirmPassword;
+  const isFormValid = formData.email && formData.username && formData.displayName && 
+                     formData.password && formData.confirmPassword && passwordsMatch;
+
   return (
-    <Paper radius="md" p="xl" withBorder style={{ width: '100%', maxWidth: 400 }}>
-      <Stack gap="md">
-        <Box ta="center">
-          <Title order={2} mb="xs">
-            Create Account
-          </Title>
-          <Text c="dimmed" size="sm">
-            Join the D&D Map community
-          </Text>
-        </Box>
-
-        {error && (
-          <Alert
-            icon={<IconAlertCircle size={16} />}
-            title="Registration Error"
-            color="red"
-            variant="light"
-          >
-            {error}
-          </Alert>
-        )}
-
-        <form onSubmit={form.onSubmit(handleSubmit)}>
+    <Container size={420} my={40}>
+      <Title ta="center" mb="xl">
+        Create Account
+      </Title>
+      
+      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+        <form onSubmit={handleSubmit}>
           <Stack gap="md">
             <TextInput
               label="Email"
               placeholder="your@email.com"
+              value={formData.email}
+              onChange={handleInputChange('email')}
               required
-              {...form.getInputProps('email')}
-              leftSection={<IconUserPlus size={16} />}
+              type="email"
             />
-
+            
             <TextInput
               label="Username"
               placeholder="your_username"
+              value={formData.username}
+              onChange={handleInputChange('username')}
               required
-              {...form.getInputProps('username')}
-              leftSection={<IconUserPlus size={16} />}
             />
-
+            
             <TextInput
               label="Display Name"
               placeholder="Your Name"
+              value={formData.displayName}
+              onChange={handleInputChange('displayName')}
               required
-              {...form.getInputProps('displayName')}
-              leftSection={<IconUserPlus size={16} />}
             />
-
+            
             <PasswordInput
               label="Password"
               placeholder="Your password"
+              value={formData.password}
+              onChange={handleInputChange('password')}
               required
-              {...form.getInputProps('password')}
-              leftSection={<IconEye size={16} />}
-              rightSection={
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ border: 'none' }}
-                >
-                  {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
-                </Button>
-              }
             />
-
+            
             <PasswordInput
               label="Confirm Password"
               placeholder="Confirm your password"
+              value={formData.confirmPassword}
+              onChange={handleInputChange('confirmPassword')}
               required
-              {...form.getInputProps('confirmPassword')}
-              leftSection={<IconEye size={16} />}
-              rightSection={
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={{ border: 'none' }}
-                >
-                  {showConfirmPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
-                </Button>
-              }
+              error={formData.confirmPassword && !passwordsMatch ? 'Passwords do not match' : undefined}
             />
-
+            
+            {error && (
+              <Alert icon={<IconAlertCircle size={16} />} color="red">
+                {error}
+              </Alert>
+            )}
+            
             <Button
               type="submit"
               fullWidth
               loading={isLoading}
-              disabled={isLoading}
+              disabled={!isFormValid}
+              leftSection={<IconUserPlus size={16} />}
             >
-              {isLoading ? 'Creating account...' : 'Create Account'}
+              Create Account
             </Button>
           </Stack>
         </form>
-
-        <Group justify="center" mt="md">
+        
+        <Divider my="md" />
+        
+        <Group justify="center">
           <Text size="sm" c="dimmed">
             Already have an account?{' '}
-            <Anchor
-              component="button"
-              type="button"
-              onClick={onSwitchToLogin}
+            <Button
+              variant="subtle"
               size="sm"
+              onClick={onBackToLogin}
+              leftSection={<IconArrowLeft size={14} />}
             >
-              Sign in
-            </Anchor>
+              Back to login
+            </Button>
           </Text>
         </Group>
-
-        <Box ta="center" mt="sm">
-          <Text size="xs" c="dimmed">
-            By creating an account, you agree to our Terms of Service and Privacy Policy
-          </Text>
-        </Box>
-      </Stack>
-    </Paper>
+      </Paper>
+    </Container>
   );
 };
-
-

@@ -521,9 +521,10 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
       height: '100%',
       minHeight: '100vh',
       margin: 0,
-      padding: 0
+      padding: 0,
+      display: 'flex'
     }}>
-      {/* Canvas Container - Account for chat box on right */}
+      {/* Canvas Container - Takes up remaining space */}
       <Box
         ref={containerRef}
         onMouseDown={handleMouseDown}
@@ -599,6 +600,7 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
         }}
         onDragOver={(e) => e.preventDefault()}
         style={{
+          flex: 1,
           width: '100%',
           height: '100%',
           position: 'absolute',
@@ -785,8 +787,19 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
         initialPosition={{ x: 100, y: 100 }}
       />
 
-      {/* Chat Box - Fixed to right side */}
-      <Chat isGM={isGM} />
+      {/* Chat Sidebar - Right side */}
+      <Box
+        style={{
+          width: '350px',
+          height: '100%',
+          borderLeft: '1px solid #e9ecef',
+          backgroundColor: '#ffffff',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <Chat height={undefined} />
+      </Box>
     </Box>
   );
 };

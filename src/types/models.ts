@@ -56,6 +56,23 @@ export interface HealthPoints {
   temporary?: number;
 }
 
+export interface CombatParticipant {
+  tokenId: string;
+  tokenName: string;
+  initiative: number;
+  dexModifier: number;
+  hasAction: boolean;
+  hasBonusAction: boolean;
+  hp: HealthPoints;
+}
+
+export interface CombatState {
+  isActive: boolean;
+  round: number;
+  currentTurnIndex: number;
+  participants: CombatParticipant[];
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -117,6 +134,14 @@ export interface TokenAssetData {
     int: number;
     wis: number;
     cha: number;
+  };
+  modifiers?: {
+    str?: number;
+    dex?: number;
+    con?: number;
+    int?: number;
+    wis?: number;
+    cha?: number;
   };
   notes?: string;
 }
@@ -373,6 +398,7 @@ export interface Character {
   avatar?: string;
   maxHp: number;
   currentHp: number;
+  hp: HealthPoints;
   armorClass: number;
   speed: number;
   initiative: number;

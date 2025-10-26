@@ -15,7 +15,6 @@ import {
   Box,
   Badge,
   FileInput,
-  Image,
   Paper,
   Center,
   Select,
@@ -23,16 +22,11 @@ import {
   Alert
 } from '@mantine/core';
 import {
-  IconUser,
-  IconSword,
-  IconShield,
-  IconBackpack,
   IconCheck,
   IconChevronRight,
   IconChevronLeft,
   IconAlertCircle
 } from '@tabler/icons-react';
-import { useMapStore } from '../stores/mapStore';
 import {
   Character,
   CharacterRace,
@@ -48,6 +42,8 @@ import {
 interface CharacterCreatorProps {
   opened: boolean;
   onClose: () => void;
+  onSave: (character: Character) => void;
+  campaignId: string;
 }
 
 // Race data with bonuses
@@ -217,8 +213,7 @@ const backgroundOptions: Record<CharacterBackground, BackgroundBonus> = {
   }
 };
 
-export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onClose }) => {
-  const { addCharacter } = useMapStore();
+export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onClose, onSave, campaignId }) => {
   const [active, setActive] = useState(0);
 
   // Character data
@@ -345,6 +340,11 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
       avatar,
       maxHp: calculateHP(),
       currentHp: calculateHP(),
+      hp: {
+        current: calculateHP(),
+        max: calculateHP(),
+        temporary: 0
+      },
       armorClass: calculateAC(),
       speed: 30,
       initiative: calculateModifier(finalAbilityScores.dexterity),
@@ -354,7 +354,7 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
       updatedAt: new Date()
     };
 
-    addCharacter(character);
+    onSave(character);
     handleClose();
   };
 
@@ -493,8 +493,8 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
             <Grid>
               {(Object.keys(abilityScores) as (keyof AbilityScores)[]).map((ability) => {
                 const score = abilityScores[ability];
-                const raceBonus = selectedRace && races[selectedRace].bonuses[ability] || 0;
-                const backgroundBonus = selectedBackground && backgroundOptions[selectedBackground].abilityBonus?.[ability] || 0;
+                const raceBonus = (selectedRace && races[selectedRace].bonuses[ability]) || 0;
+                const backgroundBonus = (selectedBackground && backgroundOptions[selectedBackground].abilityBonus?.[ability]) || 0;
                 const totalScore = score + raceBonus + backgroundBonus;
                 const totalModifier = calculateModifier(totalScore);
                 

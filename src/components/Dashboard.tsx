@@ -185,7 +185,6 @@ export const Dashboard: React.FC = () => {
     campaigns,
     characters,
     assets,
-    playlists,
     currentMap,
     currentCampaign,
     currentPlayer,
@@ -196,6 +195,7 @@ export const Dashboard: React.FC = () => {
     deleteCampaign,
     deleteCharacter,
     updateCharacter,
+    addCharacter,
     addAsset,
     deactivateMap,
     changeCampaignMap
@@ -348,7 +348,7 @@ export const Dashboard: React.FC = () => {
         height: 'calc(100vh - 60px)' // Subtract header height
       }}
     >
-      <Container size="xl" style={{ paddingTop: '0px', paddingBottom: '20px' }}>
+      <Container fluid style={{ paddingTop: '0px', paddingBottom: '20px' }}>
         <Stack gap="xl">
         {/* Header */}
         <Box>
@@ -1012,6 +1012,11 @@ export const Dashboard: React.FC = () => {
       <CharacterCreator
         opened={characterCreatorOpened}
         onClose={() => setCharacterCreatorOpened(false)}
+        onSave={(character) => {
+          addCharacter(character);
+          setCharacterCreatorOpened(false);
+        }}
+        campaignId={currentCampaign?.id || 'default_campaign'}
       />
       </Container>
     </ScrollArea>

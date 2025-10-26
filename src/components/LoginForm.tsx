@@ -1,188 +1,116 @@
 import React, { useState } from 'react';
 import {
+  Container,
   Paper,
   TextInput,
   PasswordInput,
   Button,
-  Stack,
   Title,
   Text,
-  Alert,
-  Anchor,
+  Stack,
   Group,
-  Divider,
-  Box
+  Alert,
+  Divider
 } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconLogin, IconEye, IconEyeOff } from '@tabler/icons-react';
-import { useAuthStore } from '../stores/authStore';
-import { LoginCredentials } from '../types/models';
+import { IconAlertCircle, IconLogin } from '@tabler/icons-react';
+import { useAuthStore, LoginCredentials } from '../stores/authStore';
+import { RegisterForm } from './RegisterForm';
 
-interface LoginFormProps {
-  onSwitchToRegister: () => void;
-  onLoginSuccess?: () => void;
-}
-
-export const LoginForm: React.FC<LoginFormProps> = ({ 
-  onSwitchToRegister, 
-  onLoginSuccess 
-}) => {
+export const LoginForm: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuthStore();
-  const [showPassword, setShowPassword] = useState(false);
-
-  const form = useForm<LoginCredentials>({
-    initialValues: {
-      email: '',
-      password: ''
-    },
-    validate: {
-      email: (value) => {
-        if (!value) return 'Email is required';
-        if (!/^\S+@\S+\.\S+$/.test(value)) return 'Invalid email format';
-        return null;
-      },
-      password: (value) => {
-        if (!value) return 'Password is required';
-        if (value.length < 6) return 'Password must be at least 6 characters';
-        return null;
-      }
-    }
+  const [showRegister, setShowRegister] = useState(false);
+  const [formData, setFormData] = useState<LoginCredentials>({
+    email: '',
+    password: ''
   });
 
-  const handleSubmit = async (values: LoginCredentials) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    
     try {
-      clearError();
-      await login(values);
-      notifications.show({
-        title: 'Welcome back!',
-        message: 'You have successfully logged in.',
-        color: 'green'
-      });
-      onLoginSuccess?.();
+      await login(formData);
     } catch (error) {
-      notifications.show({
-        title: 'Login failed',
-        message: error instanceof Error ? error.message : 'An error occurred',
-        color: 'red'
-      });
+      // Error is handled by the store
     }
   };
 
-  const handleDemoLogin = async () => {
-    try {
-      clearError();
-      await login({ email: 'demo@example.com', password: 'password' });
-      notifications.show({
-        title: 'Demo login successful!',
-        message: 'You are now logged in as a demo user.',
-        color: 'green'
-      });
-      onLoginSuccess?.();
-    } catch (error) {
-      notifications.show({
-        title: 'Demo login failed',
-        message: error instanceof Error ? error.message : 'An error occurred',
-        color: 'red'
-      });
-    }
+  const handleInputChange = (field: keyof LoginCredentials) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [field]: e.target.value }));
   };
+
+  if (showRegister) {
+    return <RegisterForm onBackToLogin={() => setShowRegister(false)} />;
+  }
 
   return (
-    <Paper radius="md" p="xl" withBorder style={{ width: '100%', maxWidth: 400 }}>
-      <Stack gap="md">
-        <Box ta="center">
-          <Title order={2} mb="xs">
-            Welcome Back
-          </Title>
-          <Text c="dimmed" size="sm">
-            Sign in to your D&D Map account
-          </Text>
-        </Box>
-
-        {error && (
-          <Alert
-            icon={<IconAlertCircle size={16} />}
-            title="Login Error"
-            color="red"
-            variant="light"
-          >
-            {error}
-          </Alert>
-        )}
-
-        <form onSubmit={form.onSubmit(handleSubmit)}>
+    <Container size={420} my={40}>
+      <Title ta="center" mb="xl">
+        Welcome to D&D Map App
+      </Title>
+      
+      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+        <form onSubmit={handleSubmit}>
           <Stack gap="md">
             <TextInput
               label="Email"
               placeholder="your@email.com"
+              value={formData.email}
+              onChange={handleInputChange('email')}
               required
-              {...form.getInputProps('email')}
-              leftSection={<IconLogin size={16} />}
+              type="email"
             />
-
+            
             <PasswordInput
               label="Password"
               placeholder="Your password"
+              value={formData.password}
+              onChange={handleInputChange('password')}
               required
-              {...form.getInputProps('password')}
-              leftSection={<IconEye size={16} />}
-              rightSection={
-                <Button
-                  variant="subtle"
-                  size="xs"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ border: 'none' }}
-                >
-                  {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
-                </Button>
-              }
             />
-
+            
+            {error && (
+              <Alert icon={<IconAlertCircle size={16} />} color="red">
+                {error}
+              </Alert>
+            )}
+            
             <Button
               type="submit"
               fullWidth
               loading={isLoading}
-              disabled={isLoading}
+              leftSection={<IconLogin size={16} />}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              Sign In
             </Button>
           </Stack>
         </form>
-
-        <Divider label="or" labelPosition="center" />
-
-        <Button
-          variant="outline"
-          fullWidth
-          onClick={handleDemoLogin}
-          disabled={isLoading}
-        >
-          Try Demo Account
-        </Button>
-
-        <Group justify="center" mt="md">
+        
+        <Divider my="md" />
+        
+        <Group justify="center">
           <Text size="sm" c="dimmed">
             Don't have an account?{' '}
-            <Anchor
-              component="button"
-              type="button"
-              onClick={onSwitchToRegister}
+            <Button
+              variant="subtle"
               size="sm"
+              onClick={() => setShowRegister(true)}
             >
               Sign up
-            </Anchor>
+            </Button>
           </Text>
         </Group>
-
-        <Box ta="center" mt="sm">
-          <Text size="xs" c="dimmed">
-            Demo credentials: demo@example.com / password
+        
+        <Divider my="md" />
+        
+        <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light">
+          <Text size="sm">
+            <strong>Demo Account:</strong><br />
+            Email: demo@example.com<br />
+            Password: password
           </Text>
-        </Box>
-      </Stack>
-    </Paper>
+        </Alert>
+      </Paper>
+    </Container>
   );
 };
-
-

@@ -50,8 +50,7 @@ body {
 /* Fix for Mantine AppShell layout */
 .mantine-AppShell-main {
   background-color: #f8f9fa !important;
-  position: fixed !important;
-  overflow: hidden !important; /* Changed from auto to hidden for canvas */
+  overflow: auto !important; /* Allow scrolling for content */
 }
 
 .mantine-AppShell-header {

@@ -17,7 +17,9 @@ import {
   LayerVisibilityEvent,
   ExportData,
   GridType,
-  Character
+  Character,
+  CombatState,
+  CombatParticipant
 } from '../types/models';
 import { cleanupStorage, getStorageStats } from '../utils/storageUtils';
 
@@ -40,6 +42,9 @@ interface MapStore extends AppState {
   
   // Players
   players: Player[];
+  
+  // Combat
+  combat: CombatState;
   
   // Actions - Maps
   setCurrentMap: (map: Map | null) => void;
@@ -111,6 +116,13 @@ interface MapStore extends AppState {
   // Actions - GM Mode
   toggleGM: () => void;
   
+  // Actions - Combat
+  startCombat: (participants: CombatParticipant[]) => void;
+  endCombat: () => void;
+  nextTurn: () => void;
+  consumeAction: (tokenId: string) => void;
+  consumeBonusAction: (tokenId: string) => void;
+  
   // Actions - Export/Import
   exportScene: () => ExportData | null;
   importScene: (data: ExportData) => void;
@@ -132,6 +144,13 @@ const defaultViewport: Viewport = {
 
 const defaultSelection: Selection = {
   tokenIds: []
+};
+
+const defaultCombatState: CombatState = {
+  isActive: false,
+  round: 1,
+  currentTurnIndex: 0,
+  participants: []
 };
 
 // Sample data for demonstration
@@ -264,6 +283,7 @@ export const useMapStore = create<MapStore>()(
         playlists: samplePlaylists,
         currentPlaylist: null,
         players: [defaultState.currentPlayer!],
+        combat: defaultCombatState,
 
         // Maps
         setCurrentMap: (map) => set((state) => {
@@ -631,6 +651,65 @@ export const useMapStore = create<MapStore>()(
 
         // GM Mode
         toggleGM: () => set((state) => ({ isGM: !state.isGM })),
+
+        // Combat
+        startCombat: (participants) => set((state) => ({
+          combat: {
+            isActive: true,
+            round: 1,
+            currentTurnIndex: 0,
+            participants
+          }
+        })),
+        
+        endCombat: () => set((state) => ({
+          combat: {
+            isActive: false,
+            round: 1,
+            currentTurnIndex: 0,
+            participants: []
+          }
+        })),
+        
+        nextTurn: () => set((state) => {
+          if (!state.combat.isActive || state.combat.participants.length === 0) {
+            return state;
+          }
+          
+          const nextIndex = (state.combat.currentTurnIndex + 1) % state.combat.participants.length;
+          const isNewRound = nextIndex === 0;
+          
+          return {
+            combat: {
+              ...state.combat,
+              currentTurnIndex: nextIndex,
+              round: isNewRound ? state.combat.round + 1 : state.combat.round,
+              participants: state.combat.participants.map(p => ({
+                ...p,
+                hasAction: true,
+                hasBonusAction: true
+              }))
+            }
+          };
+        }),
+        
+        consumeAction: (tokenId) => set((state) => ({
+          combat: {
+            ...state.combat,
+            participants: state.combat.participants.map(p =>
+              p.tokenId === tokenId ? { ...p, hasAction: false } : p
+            )
+          }
+        })),
+        
+        consumeBonusAction: (tokenId) => set((state) => ({
+          combat: {
+            ...state.combat,
+            participants: state.combat.participants.map(p =>
+              p.tokenId === tokenId ? { ...p, hasBonusAction: false } : p
+            )
+          }
+        })),
 
         // Export/Import
         exportScene: () => {

@@ -198,7 +198,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         height: 'calc(100vh - 60px)' // Subtract header height
       }}
     >
-      <Container size="xl">
+      <Container fluid>
         <Stack gap="xl">
         {/* Header */}
         <Group justify="space-between">

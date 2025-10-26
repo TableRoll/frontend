@@ -1,28 +1,64 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { 
-  AuthState, 
-  User, 
-  LoginCredentials, 
-  RegisterCredentials, 
-  AuthResponse, 
-  AuthError 
-} from '../types/models';
+
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  avatar?: string;
+  role: 'user' | 'admin';
+  isEmailVerified: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  lastLoginAt?: Date;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  email: string;
+  username: string;
+  displayName: string;
+  password: string;
+  confirmPassword: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+  refreshToken: string;
+}
+
+export interface AuthError {
+  message: string;
+  code?: string;
+  field?: string;
+}
+
+export interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+}
 
 interface AuthStore extends AuthState {
   // Actions
-  login: (credentials: LoginCredentials) => Promise<void>;
-  register: (credentials: RegisterCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<AuthResponse>;
+  register: (credentials: RegisterCredentials) => Promise<AuthResponse>;
   logout: () => void;
-  refreshToken: () => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
   updateUser: (updates: Partial<User>) => void;
 }
 
-// Mock API functions - replace with actual API calls
-const mockApi = {
-  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
+// Mock authentication service
+const mockAuthService = {
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000));
     
@@ -30,7 +66,7 @@ const mockApi = {
     if (credentials.email === 'demo@example.com' && credentials.password === 'password') {
       return {
         user: {
-          id: '1',
+          id: 'user_1',
           email: credentials.email,
           username: 'demo_user',
           displayName: 'Demo User',
@@ -46,8 +82,8 @@ const mockApi = {
     
     throw new Error('Invalid email or password');
   },
-  
-  register: async (credentials: RegisterCredentials): Promise<AuthResponse> => {
+
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000));
     
@@ -56,13 +92,13 @@ const mockApi = {
       throw new Error('Passwords do not match');
     }
     
-    if (credentials.password.length < 6) {
-      throw new Error('Password must be at least 6 characters long');
+    if (credentials.email === 'existing@example.com') {
+      throw new Error('Email already exists');
     }
     
     return {
       user: {
-        id: Date.now().toString(),
+        id: `user_${Date.now()}`,
         email: credentials.email,
         username: credentials.username,
         displayName: credentials.displayName,
@@ -74,27 +110,6 @@ const mockApi = {
       token: 'mock-jwt-token',
       refreshToken: 'mock-refresh-token'
     };
-  },
-  
-  refreshToken: async (): Promise<AuthResponse> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Mock refresh - in real app, this would use the refresh token
-    return {
-      user: {
-        id: '1',
-        email: 'demo@example.com',
-        username: 'demo_user',
-        displayName: 'Demo User',
-        role: 'user',
-        isEmailVerified: true,
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date()
-      },
-      token: 'new-mock-jwt-token',
-      refreshToken: 'new-mock-refresh-token'
-    };
   }
 };
 
@@ -102,70 +117,62 @@ export const useAuthStore = create<AuthStore>()(
   devtools(
     persist(
       (set, get) => ({
+        // Initial state
         user: null,
         isAuthenticated: false,
         isLoading: false,
         error: null,
 
-        login: async (credentials) => {
+        // Actions
+        login: async (credentials: LoginCredentials) => {
           set({ isLoading: true, error: null });
           
           try {
-            const response = await mockApi.login(credentials);
-            
-            // Store tokens in localStorage (in real app, use httpOnly cookies)
-            localStorage.setItem('auth_token', response.token);
-            localStorage.setItem('refresh_token', response.refreshToken);
-            
+            const response = await mockAuthService.login(credentials);
             set({
               user: response.user,
               isAuthenticated: true,
               isLoading: false,
               error: null
             });
+            return response;
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Login failed';
             set({
               user: null,
               isAuthenticated: false,
               isLoading: false,
-              error: error instanceof Error ? error.message : 'Login failed'
+              error: errorMessage
             });
             throw error;
           }
         },
 
-        register: async (credentials) => {
+        register: async (credentials: RegisterCredentials) => {
           set({ isLoading: true, error: null });
           
           try {
-            const response = await mockApi.register(credentials);
-            
-            // Store tokens in localStorage (in real app, use httpOnly cookies)
-            localStorage.setItem('auth_token', response.token);
-            localStorage.setItem('refresh_token', response.refreshToken);
-            
+            const response = await mockAuthService.register(credentials);
             set({
               user: response.user,
               isAuthenticated: true,
               isLoading: false,
               error: null
             });
+            return response;
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Registration failed';
             set({
               user: null,
               isAuthenticated: false,
               isLoading: false,
-              error: error instanceof Error ? error.message : 'Registration failed'
+              error: errorMessage
             });
             throw error;
           }
         },
 
         logout: () => {
-          // Clear tokens from localStorage
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          
           set({
             user: null,
             isAuthenticated: false,
@@ -174,69 +181,35 @@ export const useAuthStore = create<AuthStore>()(
           });
         },
 
-        refreshToken: async () => {
-          const refreshToken = localStorage.getItem('refresh_token');
-          if (!refreshToken) {
-            throw new Error('No refresh token available');
-          }
-          
-          try {
-            const response = await mockApi.refreshToken();
-            
-            // Update tokens
-            localStorage.setItem('auth_token', response.token);
-            localStorage.setItem('refresh_token', response.refreshToken);
-            
-            set({
-              user: response.user,
-              isAuthenticated: true,
-              error: null
-            });
-          } catch (error) {
-            // If refresh fails, logout user
-            get().logout();
-            throw error;
-          }
+        clearError: () => {
+          set({ error: null });
         },
 
-        clearError: () => set({ error: null }),
-        
-        setLoading: (loading) => set({ isLoading: loading }),
-        
-        updateUser: (updates) => set((state) => ({
-          user: state.user ? { ...state.user, ...updates } : null
-        }))
+        setLoading: (loading: boolean) => {
+          set({ isLoading: loading });
+        },
+
+        updateUser: (updates: Partial<User>) => {
+          const currentUser = get().user;
+          if (currentUser) {
+            set({
+              user: {
+                ...currentUser,
+                ...updates,
+                updatedAt: new Date()
+              }
+            });
+          }
+        }
       }),
       {
-        name: 'auth-store',
+        name: 'auth-storage',
         partialize: (state) => ({
           user: state.user,
           isAuthenticated: state.isAuthenticated
         })
       }
     ),
-    {
-      name: 'auth-store'
-    }
+    { name: 'AuthStore' }
   )
 );
-
-// Initialize auth state from localStorage on app start
-export const initializeAuth = () => {
-  const token = localStorage.getItem('auth_token');
-  const refreshToken = localStorage.getItem('refresh_token');
-  
-  if (token && refreshToken) {
-    // In a real app, you would validate the token here
-    // For now, we'll assume it's valid if it exists
-    useAuthStore.getState().setLoading(true);
-    
-    // Simulate token validation
-    setTimeout(() => {
-      useAuthStore.getState().setLoading(false);
-      // If token is invalid, logout will be called by refreshToken
-    }, 100);
-  }
-};
-
-
