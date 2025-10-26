@@ -1,0 +1,29 @@
+{
+  "name": "dnd-campaign-database",
+  "version": "1.0.0",
+  "description": "Database setup for D&D Campaign Management System",
+  "main": "config.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "migrate": "node migrate.js",
+    "seed": "node seed.js",
+    "reset": "node reset.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.7"
+  },
+  "keywords": [
+    "dnd",
+    "dungeons-and-dragons",
+    "postgresql",
+    "database",
+    "campaign-management"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

@@ -164,7 +164,7 @@ const TokenComponent: React.FC<TokenComponentProps> = ({
     height: tokenSize,
     cursor: token.locked ? 'not-allowed' : 'move',
     opacity: token.visible ? (isDragging || isDndDragging ? 0.3 : 1) : 0.5,
-    zIndex: isSelected ? 1000 : 100,
+    zIndex: isSelected ? 1000 : 1,
     transform: `rotate(${token.rotation}deg)`,
     transition: 'none' // Removed transition to prevent jump-back animation
   };

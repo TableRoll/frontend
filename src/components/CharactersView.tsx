@@ -93,7 +93,7 @@ export const CharactersView: React.FC = () => {
         ownerId: character.id,
         locked: false,
         visible: true,
-        size: 50,
+        size: 1,
         rotation: 0,
         description: character.description,
         ac: character.armorClass,
@@ -214,6 +214,35 @@ export const CharactersView: React.FC = () => {
                       </Menu.Dropdown>
                     </Menu>
                   </Group>
+
+                  {/* Character Image */}
+                  {character.avatar && (
+                    <Box ta="center">
+                      <Box
+                        style={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          margin: '0 auto',
+                          border: '2px solid #e9ecef'
+                        }}
+                      >
+                        <img
+                          src={character.avatar}
+                          alt={character.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  )}
 
                   {/* HP Bar */}
                   {character.hp && (
