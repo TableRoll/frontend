@@ -21,7 +21,7 @@ docker-compose -f docker-compose.dev.yml up -d
 - API: http://localhost:3001
 - Database: localhost:5432
 
-For detailed Docker instructions, see [DOCKER_GUIDE.md](DOCKER_GUIDE.md).
+For detailed Docker instructions, see [DOCKER_GUIDE.md](docs/DOCKER_GUIDE.md).
 
 ### Alternative: Windows Batch Script
 
@@ -228,6 +228,27 @@ src/
 - Tokens are rendered using WebGL for smooth performance
 - Assets are cached locally using IndexedDB
 - Lazy loading for off-screen content
+
+## 📚 Documentation
+
+All project documentation has been organized in the **[docs/](docs/)** folder:
+
+- **Getting Started**: Setup guides, Docker instructions, and quick starts
+- **Features**: Character creation, map management, token systems
+- **Database**: Schema, migrations, and integration guides
+- **Monitoring**: Grafana, Prometheus setup and configuration
+- **Development**: Workflow guides, testing checklists, and fixes
+
+📖 **[View Full Documentation Index](docs/README.md)**
+
+### Quick Links
+
+- 🗺️ [Map Management Guides](docs/MAP_UPLOAD_PREVIEW_GUIDE.md)
+- 👥 [Character Creation Guide](docs/CHARACTER_CREATION_GUIDE.md)
+- 🎭 [Token System Guide](docs/TOKEN_CREATION_GUIDE.md)
+- 🐳 [Docker Guide](docs/DOCKER_GUIDE.md)
+- 🗄️ [Database Status & Tests](docs/TEST_RESULTS_SUMMARY.md)
+- 📊 [Monitoring Setup](docs/MONITORING_QUICK_START.md)
 
 ## Contributing
 

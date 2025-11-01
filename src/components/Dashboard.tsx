@@ -48,6 +48,7 @@ import { campaignsAPI, charactersAPI, assetsAPI } from '../services/api';
 import { notifications } from '@mantine/notifications';
 import { APITest } from './APITest';
 import { DatabaseTest } from './DatabaseTest';
+import { DatabaseStatus } from './DatabaseStatus';
 
 // Map Preview Component with Grid Overlay
 interface MapPreviewProps {
@@ -184,12 +185,9 @@ export const Dashboard: React.FC = () => {
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [apiCampaigns, setApiCampaigns] = useState<any[]>([]);
   const [apiCharacters, setApiCharacters] = useState<any[]>([]);
-  const [apiAssets, setApiAssets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const {
     maps,
-    campaigns,
     characters,
     assets,
     currentMap,
@@ -212,19 +210,14 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        setLoading(true);
-        const [campaignsData, charactersData, assetsData] = await Promise.all([
+        const [campaignsData, charactersData] = await Promise.all([
           campaignsAPI.getAll(),
-          charactersAPI.getAll(),
-          assetsAPI.getAll()
+          charactersAPI.getAll()
         ]);
         setApiCampaigns(campaignsData.campaigns || []);
         setApiCharacters(charactersData.characters || []);
-        setApiAssets(assetsData.assets || []);
       } catch (error) {
         console.error('Failed to load data:', error);
-      } finally {
-        setLoading(false);
       }
     };
     loadData();
@@ -1154,6 +1147,9 @@ export const Dashboard: React.FC = () => {
         }}
         campaignId={currentCampaign?.id || ''}
       />
+
+      {/* Database Status Display */}
+      <DatabaseStatus />
 
       {/* API Test Component - Remove this in production */}
       <APITest />
