@@ -26,6 +26,7 @@ import {
   charactersAPI, 
   assetsAPI, 
   combatAPI,
+  mapsAPI,
   setAuthToken,
   removeAuthToken,
   isAuthenticated
@@ -132,6 +133,7 @@ interface MapStore extends AppState {
   loadCampaigns: () => Promise<void>;
   loadCharacters: (campaignId?: string) => Promise<void>;
   loadAssets: (campaignId?: string) => Promise<void>;
+  loadMaps: (campaignId?: string) => Promise<void>;
   
   // Actions - Export/Import
   exportData: () => ExportData;
@@ -195,12 +197,32 @@ export const useMapStore = create<MapStore>()(
       addMap: async (map) => {
         try {
           set({ isLoading: true, error: null });
-          // For now, we'll add to local state since maps aren't in the API yet
-          set((state) => ({
-            maps: [...state.maps, { ...map, id: `map_${Date.now()}`, createdAt: new Date(), updatedAt: new Date() }]
-          }));
+          const state = get();
+          
+          // Create map in API if campaign is active
+          if (state.currentCampaign?.id) {
+            const response = await mapsAPI.create({
+              name: map.name,
+              description: '',
+              campaignId: state.currentCampaign.id,
+              widthPx: map.widthPx,
+              heightPx: map.heightPx,
+              gridSize: 50,
+              gridType: 'square'
+            });
+            const newMap = response.map;
+            set((state) => ({
+              maps: [...state.maps, newMap]
+            }));
+          } else {
+            // Add to local state if no campaign
+            set((state) => ({
+              maps: [...state.maps, { ...map, id: `map_${Date.now()}`, createdAt: new Date(), updatedAt: new Date() }]
+            }));
+          }
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to add map' });
+          throw error;
         } finally {
           set({ isLoading: false });
         }
@@ -241,9 +263,12 @@ export const useMapStore = create<MapStore>()(
           set({ isLoading: true, error: null });
           set({ currentCampaign: campaign });
           if (campaign) {
-            // Load characters and assets for the campaign
-            await get().loadCharacters(campaign.id);
-            await get().loadAssets(campaign.id);
+            // Load characters, assets, and maps for the campaign
+            await Promise.all([
+              get().loadCharacters(campaign.id),
+              get().loadAssets(campaign.id),
+              get().loadMaps(campaign.id)
+            ]);
           }
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to set current campaign' });
@@ -580,6 +605,18 @@ export const useMapStore = create<MapStore>()(
           set({ assets: response.assets });
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to load assets' });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+      
+      loadMaps: async (campaignId) => {
+        try {
+          set({ isLoading: true, error: null });
+          const response = await mapsAPI.getAll(campaignId);
+          set({ maps: response.maps });
+        } catch (error) {
+          set({ error: error instanceof Error ? error.message : 'Failed to load maps' });
         } finally {
           set({ isLoading: false });
         }

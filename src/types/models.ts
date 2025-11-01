@@ -3,6 +3,8 @@
 export interface Map {
   id: string;
   name: string;
+  description?: string;
+  assetId?: string;
   widthPx: number;
   heightPx: number;
   tileSource?: string;

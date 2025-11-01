@@ -2,37 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { query } = require('../config/sqlite-database');
+const { query } = require('../config/database');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-// JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  // For development, accept mock token
-  if (token === 'mock-token-for-development') {
-    req.user = { id: 'mock-user', email: 'dev@example.com' };
-    return next();
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({

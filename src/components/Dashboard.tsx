@@ -44,9 +44,10 @@ import { useMapStore } from '../stores/mapStore';
 import { Map, Campaign } from '../types/models';
 import { formatDate } from '../utils/dateUtils';
 import { CharacterCreator } from './CharacterCreator';
-import { campaignsAPI } from '../services/api';
+import { campaignsAPI, charactersAPI, assetsAPI } from '../services/api';
 import { notifications } from '@mantine/notifications';
 import { APITest } from './APITest';
+import { DatabaseTest } from './DatabaseTest';
 
 // Map Preview Component with Grid Overlay
 interface MapPreviewProps {
@@ -181,6 +182,10 @@ export const Dashboard: React.FC = () => {
   const [previewGridSize, setPreviewGridSize] = useState(50);
   const [previewGridType, setPreviewGridType] = useState<'square' | 'hex'>('square');
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [apiCampaigns, setApiCampaigns] = useState<any[]>([]);
+  const [apiCharacters, setApiCharacters] = useState<any[]>([]);
+  const [apiAssets, setApiAssets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const {
     maps,
@@ -203,15 +208,84 @@ export const Dashboard: React.FC = () => {
     changeCampaignMap
   } = useMapStore();
 
-  const handleCreateMap = () => {
-    if (newMap.name) {
+  // Load data from API on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [campaignsData, charactersData, assetsData] = await Promise.all([
+          campaignsAPI.getAll(),
+          charactersAPI.getAll(),
+          assetsAPI.getAll()
+        ]);
+        setApiCampaigns(campaignsData.campaigns || []);
+        setApiCharacters(charactersData.characters || []);
+        setApiAssets(assetsData.assets || []);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const handleCreateMap = async () => {
+    if (!newMap.name) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please enter a map name',
+        color: 'red'
+      });
+      return;
+    }
+
+    try {
+      let assetId: string | undefined;
+      let imageUrl: string | undefined;
+
+      // Step 1: Upload image as asset if file was provided
+      if ((newMap as any).uploadedFile) {
+        notifications.show({
+          id: 'upload-progress',
+          title: 'Uploading...',
+          message: 'Uploading map image to server',
+          loading: true,
+          autoClose: false
+        });
+
+        const uploadedAsset = await assetsAPI.upload((newMap as any).uploadedFile, {
+          name: `${newMap.name} - Map Image`,
+          assetType: 'map',
+          campaignId: currentCampaign?.id,
+          isPublic: false
+        });
+
+        assetId = uploadedAsset.asset.id;
+        if (assetId) {
+          imageUrl = assetsAPI.getFileUrl(assetId);
+        }
+
+        notifications.update({
+          id: 'upload-progress',
+          title: 'Upload Complete',
+          message: 'Image uploaded successfully',
+          loading: false,
+          autoClose: 2000,
+          color: 'green'
+        });
+      }
+
+      // Step 2: Create map with asset ID
       const map: Map = {
-        id: `map_${Date.now()}`,
+        id: `map_${Date.now()}`, // Temporary ID, will be replaced by database ID
         name: newMap.name,
+        description: newMap.description,
+        assetId: assetId, // Link to uploaded asset
         widthPx: newMap.widthPx || 2048,
         heightPx: newMap.heightPx || 1536,
-        thumbnail: newMap.thumbnail || '',
-        tileSource: newMap.tileSource,
+        thumbnail: imageUrl || newMap.thumbnail || '',
+        tileSource: imageUrl || newMap.tileSource,
         layers: [
           { id: 'bg', type: 'background', name: 'Background', visible: true, opacity: 1, locked: false, order: 0 },
           { id: 'grid', type: 'grid', name: 'Grid', visible: true, opacity: 0.5, locked: false, order: 1, gridType: previewGridType, gridSize: previewGridSize },
@@ -220,12 +294,35 @@ export const Dashboard: React.FC = () => {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      addMap(map);
+
+      // Save map to database (will include assetId if image was uploaded)
+      await addMap(map);
+      
+      // Clear form and close modal
       setNewMap({});
       setImageNaturalSize(null);
       setPreviewGridSize(50);
       setPreviewGridType('square');
       setMapModalOpened(false);
+
+      notifications.show({
+        title: 'Map Created',
+        message: currentCampaign 
+          ? `${map.name} has been saved and linked to ${currentCampaign.name}`
+          : `${map.name} has been saved. You can now create a campaign using this map.`,
+        color: 'green',
+        autoClose: 5000
+      });
+    } catch (error) {
+      console.error('Failed to create map:', error);
+      notifications.update({
+        id: 'upload-progress',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create map. Please try again.',
+        color: 'red',
+        loading: false,
+        autoClose: 7000
+      });
     }
   };
 
@@ -241,7 +338,8 @@ export const Dashboard: React.FC = () => {
         const response = await campaignsAPI.create(campaignData);
         const campaign = response.campaign;
         
-        // Add to local store
+        // Add to both API state and local store
+        setApiCampaigns(prev => [...prev, campaign]);
         addCampaign(campaign);
         setNewCampaign({});
         setSelectedMap(null);
@@ -263,28 +361,38 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleMapUpload = (file: File | null) => {
+  const handleMapUpload = async (file: File | null) => {
     if (file) {
-      // In a real app, this would upload to a server
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const thumbnail = e.target?.result as string;
-        
-        // Load image to get natural dimensions
-        const img = document.createElement('img');
-        img.onload = () => {
-          setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
-          setNewMap(prev => ({ 
-            ...prev, 
-            thumbnail,
-            tileSource: thumbnail,
-            widthPx: img.naturalWidth,
-            heightPx: img.naturalHeight
-          }));
+      try {
+        // First, create a temporary preview for UI
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const thumbnail = e.target?.result as string;
+          
+          // Load image to get natural dimensions
+          const img = document.createElement('img');
+          img.onload = () => {
+            setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+            setNewMap(prev => ({ 
+              ...prev, 
+              thumbnail, // Temporary preview
+              tileSource: thumbnail,
+              widthPx: img.naturalWidth,
+              heightPx: img.naturalHeight,
+              uploadedFile: file // Store file for later upload
+            }));
+          };
+          img.src = thumbnail;
         };
-        img.src = thumbnail;
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error processing image:', error);
+        notifications.show({
+          title: 'Error',
+          message: 'Failed to process image file',
+          color: 'red'
+        });
+      }
     }
   };
 
@@ -392,7 +500,7 @@ export const Dashboard: React.FC = () => {
               <Group justify="space-between">
                 <Box>
                   <Text size="sm" c="dimmed">Campaigns</Text>
-                  <Text size="xl" fw={700}>{campaigns.length}</Text>
+                  <Text size="xl" fw={700}>{apiCampaigns.length}</Text>
                 </Box>
                 <IconUsers size={24} color="green" />
               </Group>
@@ -414,7 +522,7 @@ export const Dashboard: React.FC = () => {
               <Group justify="space-between">
                 <Box>
                   <Text size="sm" c="dimmed">Characters</Text>
-                  <Text size="xl" fw={700}>{characters.length}</Text>
+                  <Text size="xl" fw={700}>{apiCharacters.length}</Text>
                 </Box>
                 <IconUser size={24} color="purple" />
               </Group>
@@ -436,13 +544,13 @@ export const Dashboard: React.FC = () => {
 
           <ScrollArea.Autosize mah={300}>
             <Stack gap="sm">
-              {characters.length === 0 ? (
+              {apiCharacters.length === 0 ? (
                 <Alert icon={<IconAlertCircle size={16} />} color="purple">
                   No characters yet. Create your first character to begin your adventure!
                 </Alert>
               ) : (
                 <SimpleGrid cols={2} spacing="sm">
-                  {characters.map((character) => (
+                  {apiCharacters.map((character) => (
                     <Card key={character.id} withBorder p="sm">
                       <Group>
                         {character.avatar && (
@@ -457,12 +565,12 @@ export const Dashboard: React.FC = () => {
                         <Box style={{ flex: 1 }}>
                           <Text fw={500}>{character.name}</Text>
                           <Text size="sm" c="dimmed">
-                            Level {character.level} {character.race.charAt(0).toUpperCase() + character.race.slice(1)} {character.class.charAt(0).toUpperCase() + character.class.slice(1)}
+                            Level {character.level} {character.race} {character.class}
                           </Text>
                           <Group gap="xs" mt="xs">
-                            <Badge size="xs" color="red">HP {character.currentHp}/{character.maxHp}</Badge>
-                            <Badge size="xs" color="blue">AC {character.armorClass}</Badge>
-                            <Badge size="xs" color="yellow">{character.startingGold} gp</Badge>
+                            <Badge size="xs" color="red">HP {character.hp?.current || 0}/{character.hp?.max || 0}</Badge>
+                            <Badge size="xs" color="blue">AC {character.armorClass || 10}</Badge>
+                            <Badge size="xs" color="yellow">{character.gold || 0} gp</Badge>
                           </Group>
                         </Box>
                         <Menu shadow="md" width={200}>
@@ -655,13 +763,13 @@ export const Dashboard: React.FC = () => {
 
           <ScrollArea.Autosize mah={300}>
             <Stack gap="sm">
-              {campaigns.length === 0 ? (
+              {apiCampaigns.length === 0 ? (
                 <Alert icon={<IconAlertCircle size={16} />} color="blue">
-                  No campaigns yet. Create a campaign from an existing map!
+                  No campaigns yet. Create your first campaign!
                 </Alert>
               ) : (
-                campaigns.map((campaign) => {
-                  const map = maps.find(m => m.id === campaign.mapId);
+                apiCampaigns.map((campaign) => {
+                  const map = maps.find(m => m.id === campaign.currentMapId);
                   return (
                     <Card key={campaign.id} withBorder p="sm">
                       <Group justify="space-between">
@@ -671,7 +779,7 @@ export const Dashboard: React.FC = () => {
                             Based on: {map?.name || 'Unknown Map'}
                           </Text>
                           <Text size="xs" c="dimmed">
-                            {campaign.tokens.length} tokens • Session {campaign.sessionNumber || 1} • Created {formatDate(campaign.createdAt)}
+                            {campaign.tokens?.length || 0} tokens • Session {campaign.sessionNumber || 1} • Created {formatDate(campaign.createdAt)}
                           </Text>
                         </Box>
                         
@@ -755,6 +863,12 @@ export const Dashboard: React.FC = () => {
         size="lg"
       >
         <Stack gap="md">
+          {!currentCampaign && (
+            <Alert icon={<IconAlertCircle size={16} />} color="blue" title="No Campaign Active">
+              This map will be saved to your library. You can create or select a campaign later and link this map to it.
+            </Alert>
+          )}
+
           <TextInput
             label="Map Name"
             placeholder="Enter map name"
@@ -859,7 +973,9 @@ export const Dashboard: React.FC = () => {
             }}>
               Cancel
             </Button>
-            <Button onClick={handleCreateMap}>
+            <Button 
+              onClick={handleCreateMap}
+            >
               {selectedMap ? 'Update Map' : 'Create Map'}
             </Button>
           </Group>
@@ -1027,14 +1143,23 @@ export const Dashboard: React.FC = () => {
         opened={characterCreatorOpened}
         onClose={() => setCharacterCreatorOpened(false)}
         onSave={(character) => {
+          setApiCharacters(prev => [...prev, character]);
           addCharacter(character);
           setCharacterCreatorOpened(false);
+          notifications.show({
+            title: 'Success!',
+            message: 'Character created successfully',
+            color: 'green'
+          });
         }}
-        campaignId={currentCampaign?.id || 'default_campaign'}
+        campaignId={currentCampaign?.id || ''}
       />
 
       {/* API Test Component - Remove this in production */}
       <APITest />
+
+      {/* Database Integration Test - Remove this in production */}
+      <DatabaseTest />
       </Container>
     </ScrollArea>
   );

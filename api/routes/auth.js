@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { query } = require('../config/sqlite-database');
+const { query } = require('../config/database');
 
 const router = express.Router();
 
@@ -57,7 +57,7 @@ router.post('/register', [
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { id: user.id, userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -121,7 +121,7 @@ router.post('/login', [
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { id: user.id, userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );

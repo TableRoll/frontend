@@ -22,6 +22,7 @@ import {
   CombatParticipant
 } from '../types/models';
 import { cleanupStorage, getStorageStats } from '../utils/storageUtils';
+import { mapsAPI } from '../services/api';
 
 interface MapStore extends AppState {
   // Maps
@@ -314,7 +315,52 @@ export const useMapStore = create<MapStore>()(
             )
           };
         }),
-        addMap: (map) => set((state) => ({ maps: [...state.maps, map] })),
+        addMap: async (map) => {
+          // ALWAYS save to database - never store locally only
+          // Maps can be created without a campaign and associated later
+          const state = get();
+          const campaignId = state.currentCampaign?.id;
+
+          try {
+            // Save to database FIRST
+            const mapData: any = {
+              name: map.name,
+              description: map.description || '',
+              widthPx: map.widthPx,
+              heightPx: map.heightPx,
+              gridSize: 50,
+              gridType: 'square'
+            };
+            
+            // Only include campaignId if it exists
+            if (campaignId) {
+              mapData.campaignId = campaignId;
+            }
+            
+            // Only include assetId if image was uploaded
+            if (map.assetId) {
+              mapData.assetId = map.assetId;
+            }
+            
+            const response = await mapsAPI.create(mapData);
+
+            // Only add to local store after successful database save
+            const dbMap = response.map;
+            set((state) => ({ 
+              maps: [...state.maps, {
+                ...map,
+                id: dbMap.id, // Use database-generated ID
+                createdAt: new Date(dbMap.createdAt),
+                updatedAt: new Date(dbMap.updatedAt)
+              }] 
+            }));
+
+            return dbMap;
+          } catch (err) {
+            console.error('Failed to save map to database:', err);
+            throw new Error('Failed to save map to database. Map was NOT created.');
+          }
+        },
         updateMap: (mapId, updates) => set((state) => ({
           maps: state.maps.map(map => 
             map.id === mapId ? { ...map, ...updates } : map

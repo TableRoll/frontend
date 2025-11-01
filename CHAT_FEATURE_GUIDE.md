@@ -218,3 +218,4 @@ The chat is integrated into the MapCanvas component:
 
 
 
+

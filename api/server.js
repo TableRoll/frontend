@@ -10,7 +10,8 @@ const characterRoutes = require('./routes/characters');
 const campaignRoutes = require('./routes/campaigns');
 const assetRoutes = require('./routes/assets');
 const combatRoutes = require('./routes/combat');
-const { testConnection } = require('./config/sqlite-database');
+const mapRoutes = require('./routes/maps');
+const { testConnection } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +53,7 @@ app.use('/api/characters', characterRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/combat', combatRoutes);
+app.use('/api/maps', mapRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

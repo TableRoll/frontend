@@ -1,35 +1,9 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { query, transaction } = require('../config/sqlite-database');
+const { query, transaction } = require('../config/database');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-// JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  // For development, accept mock token
-  if (token === 'mock-token-for-development') {
-    req.user = { id: 'mock-user', email: 'dev@example.com' };
-    return next();
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
 
 // Get all campaigns for a user
 router.get('/', authenticateToken, async (req, res) => {
@@ -58,6 +32,7 @@ router.get('/', authenticateToken, async (req, res) => {
         isActive: campaign.is_active,
         characterCount: parseInt(campaign.character_count),
         sessionCount: parseInt(campaign.session_count),
+        tokens: [],
         createdAt: campaign.created_at,
         updatedAt: campaign.updated_at
       }))
@@ -150,7 +125,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create new campaign
 router.post('/', authenticateToken, [
   body('name').isLength({ min: 1, max: 100 }).trim(),
-  body('description').optional().isLength({ max: 1000 }).trim()
+  body('description').optional().isLength({ max: 1000 }).trim(),
+  body('currentMapId').optional().isUUID()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -158,13 +134,13 @@ router.post('/', authenticateToken, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, description } = req.body;
+    const { name, description, currentMapId } = req.body;
 
     const result = await query(`
-      INSERT INTO campaigns (name, description, owner_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO campaigns (name, description, owner_id, current_map_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
-    `, [name, description || '', req.user.id]);
+    `, [name, description || '', req.user.id, currentMapId || null]);
 
     const campaign = result.rows[0];
 
@@ -174,8 +150,10 @@ router.post('/', authenticateToken, [
         id: campaign.id,
         name: campaign.name,
         description: campaign.description,
+        currentMapId: campaign.current_map_id,
         sessionNumber: campaign.session_number,
         isActive: campaign.is_active,
+        tokens: [],
         createdAt: campaign.created_at
       }
     });

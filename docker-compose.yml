@@ -37,6 +37,7 @@ services:
       DB_PASSWORD: dnd_password_2024
       JWT_SECRET: your_super_secret_jwt_key_change_in_production
       FRONTEND_URL: http://localhost:3000
+      ALLOW_DEV_TOKEN: "true"
     volumes:
       - api_uploads:/app/uploads
     ports:
