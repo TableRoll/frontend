@@ -1,0 +1,46 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'dnd-campaign-monitor'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter for system metrics (CPU, RAM, Disk)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'docker-host'
+
+  # Docker containers metrics via cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # PostgreSQL Database metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Node.js API metrics (disabled - endpoint not implemented yet)
+  # To enable: Add prom-client to api/package.json and expose /metrics endpoint
+  # - job_name: 'nodejs-api'
+  #   static_configs:
+  #     - targets: ['api:3001']
+  #   metrics_path: '/metrics'
+  #   scrape_interval: 10s
+

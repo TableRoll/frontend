@@ -54,6 +54,10 @@ api/package-lock.json
 uploads/
 assets/
 
+# Monitoring data
+prometheus/
+grafana/data/
+
 # IDE and editor files
 .vscode/*
 !.vscode/extensions.json
