@@ -17,10 +17,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow images to load cross-origin
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['Content-Type', 'Content-Length']
 }));
 
 // Rate limiting

@@ -60,10 +60,12 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   // Filter assets based on search and type
+  // Exclude map-type assets as they're managed in the Maps section
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = selectedType === 'all' || asset.type === selectedType;
-    return matchesSearch && matchesType;
+    const isNotMapAsset = asset.type !== 'map'; // Hide map images from asset panel
+    return matchesSearch && matchesType && isNotMapAsset;
   });
 
   // Handle file upload

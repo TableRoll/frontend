@@ -22,7 +22,7 @@ import {
   CombatParticipant
 } from '../types/models';
 import { cleanupStorage, getStorageStats } from '../utils/storageUtils';
-import { mapsAPI } from '../services/api';
+import { mapsAPI, campaignsAPI, charactersAPI, assetsAPI } from '../services/api';
 
 interface MapStore extends AppState {
   // Maps
@@ -134,6 +134,9 @@ interface MapStore extends AppState {
   // Actions - Storage Management
   getStorageStats: () => any;
   cleanupStorage: () => void;
+  
+  // Actions - Database Loading
+  loadFromDatabase: () => Promise<void>;
 }
 
 const defaultViewport: Viewport = {
@@ -276,51 +279,105 @@ export const useMapStore = create<MapStore>()(
     persist(
       (set, get) => ({
         ...defaultState,
-        maps: sampleMaps,
-        campaigns: sampleCampaigns,
-        scenes: sampleScenes, // Backwards compatibility
+        maps: [], // Load from database on init
+        campaigns: [], // Load from database on init
+        scenes: [], // Backwards compatibility
         characters: [], // No sample characters, users create their own
-        assets: sampleAssets,
+        assets: [], // Load from database on init
         playlists: samplePlaylists,
         currentPlaylist: null,
         players: [defaultState.currentPlayer!],
         combat: defaultCombatState,
 
+        // Actions - Load from Database
+        loadFromDatabase: async () => {
+          try {
+            const [mapsData, campaignsData, charactersData, assetsData] = await Promise.all([
+              mapsAPI.getAll().catch(() => ({ maps: [] })),
+              campaignsAPI.getAll().catch(() => ({ campaigns: [] })),
+              charactersAPI.getAll().catch(() => ({ characters: [] })),
+              assetsAPI.getAll().catch(() => ({ assets: [] }))
+            ]);
+            
+            set({
+              maps: (mapsData.maps || []).map((m: any) => ({
+                id: m.id,
+                name: m.name,
+                description: m.description,
+                widthPx: m.widthPx,
+                heightPx: m.heightPx,
+                thumbnail: m.assetId ? assetsAPI.getFileUrl(m.assetId) : '',
+                tileSource: m.assetId ? assetsAPI.getFileUrl(m.assetId) : '',
+                assetId: m.assetId,
+                layers: [
+                  { id: 'bg', type: 'background', name: 'Background', visible: true, opacity: 1, locked: false, order: 0 },
+                  { id: 'grid', type: 'grid', name: 'Grid', visible: true, opacity: 0.5, locked: false, order: 1, gridType: m.gridType || 'square', gridSize: m.gridSize || 50 },
+                  { id: 'tokens', type: 'tokens', name: 'Tokens', visible: true, opacity: 1, locked: false, order: 2 }
+                ],
+                createdAt: new Date(m.createdAt),
+                updatedAt: new Date(m.updatedAt)
+              })),
+              campaigns: campaignsData.campaigns || [],
+              scenes: campaignsData.campaigns || [],
+              characters: charactersData.characters || [],
+              assets: assetsData.assets || []
+            });
+            
+            console.log('✅ Loaded data from database:', {
+              maps: mapsData.maps?.length || 0,
+              campaigns: campaignsData.campaigns?.length || 0,
+              characters: charactersData.characters?.length || 0,
+              assets: assetsData.assets?.length || 0
+            });
+            
+            // Debug: Log first map to verify image URLs
+            if (mapsData.maps && mapsData.maps.length > 0) {
+              const firstMap = mapsData.maps[0];
+              console.log('📍 First map data:', {
+                name: firstMap.name,
+                assetId: firstMap.assetId,
+                imageUrl: firstMap.assetId ? assetsAPI.getFileUrl(firstMap.assetId) : 'NO ASSET ID'
+              });
+            }
+          } catch (error) {
+            console.error('Failed to load data from database:', error);
+          }
+        },
+
         // Maps
         setCurrentMap: (map) => set((state) => {
           if (!map) {
-            return { currentMap: null, currentCampaign: null };
+            return { currentMap: null };
           }
           
-          // Only set map if there's an active campaign
-          if (!state.currentCampaign) {
-            return state;
+          // Maps can be set independently of campaigns
+          // If there's an active campaign, update it to use this map
+          if (state.currentCampaign) {
+            const updatedCampaign = {
+              ...state.currentCampaign,
+              currentMapId: map.id,
+              mapId: map.id, // Keep for backwards compatibility
+              updatedAt: new Date()
+            };
+            
+            return { 
+              currentMap: map, 
+              currentCampaign: updatedCampaign,
+              campaigns: state.campaigns.map(campaign => 
+                campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
+              ),
+              scenes: state.scenes.map(scene => 
+                scene.id === state.currentCampaign!.id ? updatedCampaign : scene
+              )
+            };
           }
           
-          // Update the current campaign to use this map
-          const updatedCampaign = {
-            ...state.currentCampaign,
-            mapId: map.id,
-            updatedAt: new Date()
-          };
-          
-          return { 
-            currentMap: map, 
-            currentCampaign: updatedCampaign,
-            campaigns: state.campaigns.map(campaign => 
-              campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
-            ),
-            scenes: state.scenes.map(scene => 
-              scene.id === state.currentCampaign!.id ? updatedCampaign : scene
-            )
-          };
+          // No campaign active - just set the map
+          return { currentMap: map };
         }),
         addMap: async (map) => {
           // ALWAYS save to database - never store locally only
           // Maps can be created without a campaign and associated later
-          const state = get();
-          const campaignId = state.currentCampaign?.id;
-
           try {
             // Save to database FIRST
             const mapData: any = {
@@ -332,15 +389,13 @@ export const useMapStore = create<MapStore>()(
               gridType: 'square'
             };
             
-            // Only include campaignId if it exists
-            if (campaignId) {
-              mapData.campaignId = campaignId;
-            }
-            
             // Only include assetId if image was uploaded
             if (map.assetId) {
               mapData.assetId = map.assetId;
             }
+            
+            // Maps are independent - don't include campaignId
+            // Campaigns will reference maps via currentMapId
             
             const response = await mapsAPI.create(mapData);
 
@@ -386,21 +441,48 @@ export const useMapStore = create<MapStore>()(
             return { currentCampaign: null, currentMap: null };
           }
           
-          // Save current campaign's tokens before switching
+          // Save current campaign's tokens to mapTokenHistory before switching
           if (state.currentCampaign) {
+            const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+            const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
+            
+            // Save current map's tokens to history
+            const updatedHistory: Record<string, Token[]> = {
+              ...mapTokenHistory,
+              ...(currentMapId ? { [currentMapId]: [...state.currentCampaign.tokens] } : {})
+            };
+            
+            const savedCampaign = {
+              ...state.currentCampaign,
+              mapTokenHistory: updatedHistory,
+              tokens: state.currentCampaign.tokens,
+              updatedAt: new Date(),
+              lastPlayedAt: new Date()
+            };
+            
             const updatedCampaigns = state.campaigns.map(c => 
-              c.id === state.currentCampaign!.id 
-                ? { ...c, tokens: state.currentCampaign!.tokens, updatedAt: new Date(), lastPlayedAt: new Date() }
-                : c
+              c.id === state.currentCampaign!.id ? savedCampaign : c
             );
             
             // Find the map associated with the new campaign
-            const associatedMap = state.maps.find(map => map.id === campaign.mapId);
+            // Check both currentMapId (new) and mapId (deprecated) for backwards compatibility
+            const newMapId = campaign.currentMapId || campaign.mapId;
+            const associatedMap = newMapId ? state.maps.find(map => map.id === newMapId) : null;
+            
+            // Load tokens from mapTokenHistory for the new campaign's map
+            const newCampaignHistory = campaign.mapTokenHistory || {};
+            const tokensForMap = newMapId ? (newCampaignHistory[newMapId] || []) : [];
+            
+            const activatedCampaign = {
+              ...campaign,
+              tokens: tokensForMap,
+              lastPlayedAt: new Date()
+            };
             
             return { 
               campaigns: updatedCampaigns,
               scenes: updatedCampaigns, // Keep in sync
-              currentCampaign: { ...campaign, lastPlayedAt: new Date() },
+              currentCampaign: activatedCampaign,
               currentMap: associatedMap || null,
               selectedTokens: defaultSelection,
               viewport: defaultViewport
@@ -408,10 +490,20 @@ export const useMapStore = create<MapStore>()(
           }
           
           // First campaign activation
-          const associatedMap = state.maps.find(map => map.id === campaign.mapId);
+          // Check both currentMapId (new) and mapId (deprecated) for backwards compatibility
+          const mapId = campaign.currentMapId || campaign.mapId;
+          const associatedMap = mapId ? state.maps.find(map => map.id === mapId) : null;
+          
+          // Load tokens from mapTokenHistory for the campaign's map
+          const campaignHistory = campaign.mapTokenHistory || {};
+          const tokensForMap = mapId ? (campaignHistory[mapId] || []) : [];
           
           return { 
-            currentCampaign: { ...campaign, lastPlayedAt: new Date() },
+            currentCampaign: { 
+              ...campaign, 
+              tokens: tokensForMap,
+              lastPlayedAt: new Date() 
+            },
             currentMap: associatedMap || null,
             selectedTokens: defaultSelection,
             viewport: defaultViewport
@@ -450,18 +542,21 @@ export const useMapStore = create<MapStore>()(
             return state;
           }
           
+          // Get current map ID (check both currentMapId and mapId for backwards compatibility)
+          const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+          
           // If trying to switch to the same map, do nothing
-          if (state.currentCampaign.mapId === mapId) {
+          if (currentMapId === mapId) {
             return state;
           }
           
           // Initialize mapTokenHistory if it doesn't exist
           const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
           
-          // Save current map's tokens to history
-          const updatedHistory = {
+          // Save current map's tokens to history before switching
+          const updatedHistory: Record<string, Token[]> = {
             ...mapTokenHistory,
-            [state.currentCampaign.mapId]: [...state.currentCampaign.tokens]
+            ...(currentMapId ? { [currentMapId]: [...state.currentCampaign.tokens] } : {})
           };
           
           // Retrieve tokens for the new map from history, or use empty array if new
@@ -469,7 +564,8 @@ export const useMapStore = create<MapStore>()(
           
           const updatedCampaign = {
             ...state.currentCampaign,
-            mapId: mapId,
+            currentMapId: mapId,
+            mapId: mapId, // Keep for backwards compatibility
             tokens: tokensForNewMap,
             mapTokenHistory: updatedHistory,
             updatedAt: new Date()
@@ -513,91 +609,146 @@ export const useMapStore = create<MapStore>()(
 
 
         // Tokens (works with campaigns)
-        addToken: (token) => set((state) => ({
-          campaigns: state.campaigns.map(campaign => 
-            campaign.id === state.currentCampaign?.id 
-              ? { ...campaign, tokens: [...campaign.tokens, token] }
-              : campaign
-          ),
-          scenes: state.scenes.map(scene => 
-            scene.id === state.currentCampaign?.id 
-              ? { ...scene, tokens: [...scene.tokens, token] }
-              : scene
-          ),
-          currentCampaign: state.currentCampaign 
-            ? { ...state.currentCampaign, tokens: [...state.currentCampaign.tokens, token] }
-            : null
-        })),
-        updateToken: (tokenId, updates) => set((state) => ({
-          campaigns: state.campaigns.map(campaign => ({
-            ...campaign,
-            tokens: campaign.tokens.map(token => 
-              token.id === tokenId ? { ...token, ...updates } : token
-            )
-          })),
-          scenes: state.scenes.map(scene => ({
-            ...scene,
-            tokens: scene.tokens.map(token => 
-              token.id === tokenId ? { ...token, ...updates } : token
-            )
-          })),
-          currentCampaign: state.currentCampaign 
-            ? {
-                ...state.currentCampaign,
-                tokens: state.currentCampaign.tokens.map(token => 
-                  token.id === tokenId ? { ...token, ...updates } : token
-                )
-              }
-            : null
-        })),
-        deleteToken: (tokenId) => set((state) => ({
-          campaigns: state.campaigns.map(campaign => ({
-            ...campaign,
-            tokens: campaign.tokens.filter(token => token.id !== tokenId)
-          })),
-          scenes: state.scenes.map(scene => ({
-            ...scene,
-            tokens: scene.tokens.filter(token => token.id !== tokenId)
-          })),
-          currentCampaign: state.currentCampaign 
-            ? {
-                ...state.currentCampaign,
-                tokens: state.currentCampaign.tokens.filter(token => token.id !== tokenId)
-              }
-            : null,
-          selectedTokens: {
-            ...state.selectedTokens,
-            tokenIds: state.selectedTokens.tokenIds.filter(id => id !== tokenId)
+        addToken: (token) => set((state) => {
+          if (!state.currentCampaign) {
+            // If no campaign, tokens can't be added (they need a campaign context)
+            console.warn('Cannot add token without an active campaign');
+            return state;
           }
-        })),
-        moveToken: (event) => set((state) => ({
-          campaigns: state.campaigns.map(campaign => ({
-            ...campaign,
-            tokens: campaign.tokens.map(token => 
-              token.id === event.tokenId 
-                ? { ...token, x: event.newX, y: event.newY }
-                : token
-            )
-          })),
-          scenes: state.scenes.map(scene => ({
-            ...scene,
-            tokens: scene.tokens.map(token => 
-              token.id === event.tokenId 
-                ? { ...token, x: event.newX, y: event.newY }
-                : token
-            )
-          })),
-          currentCampaign: state.currentCampaign 
-            ? {
-                ...state.currentCampaign,
-                tokens: state.currentCampaign.tokens.map(token => 
-                  token.id === event.tokenId 
-                    ? { ...token, x: event.newX, y: event.newY }
-                    : token
-                )
-              }
-            : null
-        })),
+          
+          const updatedTokens = [...state.currentCampaign.tokens, token];
+          const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+          
+          // Update mapTokenHistory for the current map
+          const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
+          const updatedHistory: Record<string, Token[]> = {
+            ...mapTokenHistory,
+            ...(currentMapId ? { [currentMapId]: updatedTokens } : {})
+          };
+          
+          const updatedCampaign = {
+            ...state.currentCampaign,
+            tokens: updatedTokens,
+            mapTokenHistory: updatedHistory,
+            updatedAt: new Date()
+          };
+          
+          return {
+            campaigns: state.campaigns.map(campaign => 
+              campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
+            ),
+            scenes: state.scenes.map(scene => 
+              scene.id === state.currentCampaign!.id ? updatedCampaign : scene
+            ),
+            currentCampaign: updatedCampaign
+          };
+        }),
+        updateToken: (tokenId, updates) => set((state) => {
+          if (!state.currentCampaign) {
+            return state;
+          }
+          
+          const updatedTokens = state.currentCampaign.tokens.map(token => 
+            token.id === tokenId ? { ...token, ...updates, updatedAt: new Date() } : token
+          );
+          const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+          
+          // Update mapTokenHistory for the current map
+          const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
+          const updatedHistory: Record<string, Token[]> = {
+            ...mapTokenHistory,
+            ...(currentMapId ? { [currentMapId]: updatedTokens } : {})
+          };
+          
+          const updatedCampaign = {
+            ...state.currentCampaign,
+            tokens: updatedTokens,
+            mapTokenHistory: updatedHistory,
+            updatedAt: new Date()
+          };
+          
+          return {
+            campaigns: state.campaigns.map(campaign => 
+              campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
+            ),
+            scenes: state.scenes.map(scene => 
+              scene.id === state.currentCampaign!.id ? updatedCampaign : scene
+            ),
+            currentCampaign: updatedCampaign
+          };
+        }),
+        deleteToken: (tokenId) => set((state) => {
+          if (!state.currentCampaign) {
+            return state;
+          }
+          
+          const updatedTokens = state.currentCampaign.tokens.filter(token => token.id !== tokenId);
+          const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+          
+          // Update mapTokenHistory for the current map
+          const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
+          const updatedHistory: Record<string, Token[]> = {
+            ...mapTokenHistory,
+            ...(currentMapId ? { [currentMapId]: updatedTokens } : {})
+          };
+          
+          const updatedCampaign = {
+            ...state.currentCampaign,
+            tokens: updatedTokens,
+            mapTokenHistory: updatedHistory,
+            updatedAt: new Date()
+          };
+          
+          return {
+            campaigns: state.campaigns.map(campaign => 
+              campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
+            ),
+            scenes: state.scenes.map(scene => 
+              scene.id === state.currentCampaign!.id ? updatedCampaign : scene
+            ),
+            currentCampaign: updatedCampaign,
+            selectedTokens: {
+              ...state.selectedTokens,
+              tokenIds: state.selectedTokens.tokenIds.filter(id => id !== tokenId)
+            }
+          };
+        }),
+        moveToken: (event) => set((state) => {
+          if (!state.currentCampaign) {
+            return state;
+          }
+          
+          const updatedTokens = state.currentCampaign.tokens.map(token => 
+            token.id === event.tokenId 
+              ? { ...token, x: event.newX, y: event.newY, updatedAt: new Date() }
+              : token
+          );
+          const currentMapId = state.currentCampaign.currentMapId || state.currentCampaign.mapId;
+          
+          // Update mapTokenHistory for the current map
+          const mapTokenHistory = state.currentCampaign.mapTokenHistory || {};
+          const updatedHistory: Record<string, Token[]> = {
+            ...mapTokenHistory,
+            ...(currentMapId ? { [currentMapId]: updatedTokens } : {})
+          };
+          
+          const updatedCampaign = {
+            ...state.currentCampaign,
+            tokens: updatedTokens,
+            mapTokenHistory: updatedHistory,
+            updatedAt: new Date()
+          };
+          
+          return {
+            campaigns: state.campaigns.map(campaign => 
+              campaign.id === state.currentCampaign!.id ? updatedCampaign : campaign
+            ),
+            scenes: state.scenes.map(scene => 
+              scene.id === state.currentCampaign!.id ? updatedCampaign : scene
+            ),
+            currentCampaign: updatedCampaign
+          };
+        }),
 
         // Selection
         selectTokens: (event) => set((state) => ({

@@ -4,11 +4,12 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all maps for a campaign
+// Get all maps for a user
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { campaignId } = req.query;
     
+    // Maps are owned by users (owner_id) and can belong to campaigns (campaign_id)
     let queryText = `
       SELECT m.*, a.file_path as image_url, a.thumbnail_path, c.name as campaign_name
       FROM maps m
@@ -58,6 +59,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Check ownership directly on map
     const result = await query(`
       SELECT m.*, a.file_path as image_url, a.thumbnail_path, c.name as campaign_name
       FROM maps m
@@ -141,6 +143,7 @@ router.post('/', authenticateToken, [
       }
     }
 
+    // Maps have owner_id (user) and campaign_id (campaign)
     const result = await query(`
       INSERT INTO maps (name, description, campaign_id, asset_id, width_px, height_px, grid_size, grid_type, owner_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -191,11 +194,10 @@ router.put('/:id', authenticateToken, [
     const { id } = req.params;
     const updates = req.body;
 
-    // Check if map exists and belongs to user's campaign
+    // Check if map exists and belongs to user
     const existingMap = await query(`
       SELECT m.* FROM maps m
-      JOIN campaigns c ON m.campaign_id = c.id
-      WHERE m.id = $1 AND c.owner_id = $2
+      WHERE m.id = $1 AND m.owner_id = $2
     `, [id, req.user.userId]);
 
     if (existingMap.rows.length === 0) {
@@ -276,11 +278,10 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if map exists and belongs to user's campaign
+    // Check if map exists and belongs to user
     const existingMap = await query(`
       SELECT m.* FROM maps m
-      JOIN campaigns c ON m.campaign_id = c.id
-      WHERE m.id = $1 AND c.owner_id = $2
+      WHERE m.id = $1 AND m.owner_id = $2
     `, [id, req.user.userId]);
 
     if (existingMap.rows.length === 0) {

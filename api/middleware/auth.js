@@ -15,9 +15,10 @@ const authenticateToken = (req, res, next) => {
   // Development mode: allow mock token
   if ((process.env.NODE_ENV === 'development' || process.env.ALLOW_DEV_TOKEN === 'true') && token === 'mock-token-for-development') {
     // Create a mock user for development
+    // Using a valid UUID format for database compatibility
     req.user = {
-      userId: 'dev-user-id',
-      id: 'dev-user-id',
+      userId: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-0000-0000-000000000001',
       email: 'dev@example.com',
       username: 'developer'
     };

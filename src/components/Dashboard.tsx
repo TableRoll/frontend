@@ -40,7 +40,7 @@ import {
   IconAlertCircle,
   IconX
 } from '@tabler/icons-react';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 import { Map, Campaign } from '../types/models';
 import { formatDate } from '../utils/dateUtils';
 import { CharacterCreator } from './CharacterCreator';
@@ -206,16 +206,24 @@ export const Dashboard: React.FC = () => {
     changeCampaignMap
   } = useMapStore();
 
-  // Load data from API on mount
+  // Load data from database on mount
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Load data into the store from database
+        const store = useMapStore.getState();
+        await store.loadMaps();
+        await store.loadCampaigns();
+        
+        // Also load into local state for dashboard display
         const [campaignsData, charactersData] = await Promise.all([
           campaignsAPI.getAll(),
           charactersAPI.getAll()
         ]);
         setApiCampaigns(campaignsData.campaigns || []);
         setApiCharacters(charactersData.characters || []);
+        
+        console.log('✅ Dashboard loaded data from database');
       } catch (error) {
         console.error('Failed to load data:', error);
       }
@@ -289,7 +297,11 @@ export const Dashboard: React.FC = () => {
       };
 
       // Save map to database (will include assetId if image was uploaded)
-      await addMap(map);
+      const savedMap = await addMap(map);
+      
+      // Reload maps from database to ensure we have the latest data
+      const store = useMapStore.getState();
+      await store.loadMaps();
       
       // Clear form and close modal
       setNewMap({});
@@ -300,12 +312,12 @@ export const Dashboard: React.FC = () => {
 
       notifications.show({
         title: 'Map Created',
-        message: currentCampaign 
-          ? `${map.name} has been saved and linked to ${currentCampaign.name}`
-          : `${map.name} has been saved. You can now create a campaign using this map.`,
+        message: `${map.name} has been saved to the database with ${assetId ? 'image' : 'no image'}`,
         color: 'green',
         autoClose: 5000
       });
+      
+      console.log('✅ Map created and saved to database:', savedMap);
     } catch (error) {
       console.error('Failed to create map:', error);
       notifications.update({
@@ -320,13 +332,22 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleCreateCampaign = async () => {
-    if (newCampaign.name && selectedMap) {
+    if (newCampaign.name) {
       try {
-        const campaignData = {
+        const campaignData: any = {
           name: newCampaign.name,
-          description: newCampaign.description,
-          currentMapId: selectedMap.id
+          description: newCampaign.description
         };
+        
+        // Include currentMapId if a map was selected and it's a valid UUID (from database)
+        if (selectedMap) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const isValidUUID = uuidRegex.test(selectedMap.id);
+          
+          if (isValidUUID) {
+            campaignData.currentMapId = selectedMap.id;
+          }
+        }
         
         const response = await campaignsAPI.create(campaignData);
         const campaign = response.campaign;
@@ -334,21 +355,27 @@ export const Dashboard: React.FC = () => {
         // Add to both API state and local store
         setApiCampaigns(prev => [...prev, campaign]);
         addCampaign(campaign);
+        
+        // Automatically activate the newly created campaign so the map loads
+        await setCurrentCampaign(campaign);
+        
         setNewCampaign({});
         setSelectedMap(null);
         setCampaignModalOpened(false);
         
         notifications.show({
           title: 'Campaign Created',
-          message: `${campaign.name} has been created successfully`,
+          message: `${campaign.name} has been created successfully${selectedMap ? ' with initial map' : ''} and activated`,
           color: 'green'
         });
       } catch (error) {
         console.error('Failed to create campaign:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create campaign. Please try again.';
         notifications.show({
           title: 'Error',
-          message: 'Failed to create campaign. Please try again.',
-          color: 'red'
+          message: errorMessage,
+          color: 'red',
+          autoClose: 5000
         });
       }
     }
@@ -824,7 +851,25 @@ export const Dashboard: React.FC = () => {
                               <Menu.Item
                                 leftSection={<IconTrash size={14} />}
                                 color="red"
-                                onClick={() => deleteCampaign(campaign.id)}
+                                onClick={async () => {
+                                  try {
+                                    await deleteCampaign(campaign.id);
+                                    // Also update local API campaigns state
+                                    setApiCampaigns(prev => prev.filter(c => c.id !== campaign.id));
+                                    notifications.show({
+                                      title: 'Campaign Deleted',
+                                      message: `${campaign.name} has been deleted`,
+                                      color: 'green'
+                                    });
+                                  } catch (error) {
+                                    console.error('Failed to delete campaign:', error);
+                                    notifications.show({
+                                      title: 'Error',
+                                      message: error instanceof Error ? error.message : 'Failed to delete campaign',
+                                      color: 'red'
+                                    });
+                                  }
+                                }}
                               >
                                 Delete
                               </Menu.Item>
@@ -988,16 +1033,22 @@ export const Dashboard: React.FC = () => {
       >
         <Stack gap="md">
           <Select
-            label="Starting Map"
-            placeholder="Select a map"
+            label="Starting Map (Optional)"
+            placeholder="Select a map to start with, or leave empty"
             data={maps.map(map => ({ value: map.id, label: map.name }))}
             value={selectedMap?.id || ''}
             onChange={(value) => {
               const map = maps.find(m => m.id === value);
               setSelectedMap(map || null);
             }}
-            required
+            clearable
           />
+          
+          {selectedMap && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedMap.id) && (
+            <Alert icon={<IconAlertCircle size={16} />} color="yellow" title="Sample Map Selected">
+              This is a sample map and won't be linked to the database. Create a new map first to have it saved permanently.
+            </Alert>
+          )}
           
           <TextInput
             label="Campaign Name"
@@ -1019,7 +1070,7 @@ export const Dashboard: React.FC = () => {
             <Button variant="outline" onClick={() => setCampaignModalOpened(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateCampaign} disabled={!selectedMap}>
+            <Button onClick={handleCreateCampaign} disabled={!newCampaign.name}>
               Create Campaign
             </Button>
           </Group>

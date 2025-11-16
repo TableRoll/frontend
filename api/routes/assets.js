@@ -167,9 +167,9 @@ router.post('/upload', authenticateToken, upload.single('file'), [
 
     // Generate thumbnail for images
     let thumbnailPath = null;
-    if (assetType === 'image' || assetType === 'token') {
-      // In a real implementation, you would generate a thumbnail here
-      // For now, we'll just use the same file
+    if (assetType === 'image' || assetType === 'token' || assetType === 'map') {
+      // For now, we'll just use the same file as thumbnail
+      // In production, you would generate a smaller thumbnail image
       thumbnailPath = req.file.path;
     }
 
@@ -325,13 +325,37 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // Serve asset files
-router.get('/file/:id', authenticateToken, async (req, res) => {
+// Serve asset file - supports token in query string for image tags
+router.get('/file/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { token } = req.query;
+    
+    // Get token from query string or Authorization header
+    let userId = null;
+    let authToken = token || req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!authToken) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    
+    // Verify token (support both dev token and real JWT)
+    if ((process.env.NODE_ENV === 'development' || process.env.ALLOW_DEV_TOKEN === 'true') && authToken === 'mock-token-for-development') {
+      userId = '00000000-0000-0000-0000-000000000001';
+    } else {
+      try {
+        const jwt = require('jsonwebtoken');
+        const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+        const decoded = jwt.verify(authToken, JWT_SECRET);
+        userId = decoded.userId || decoded.id;
+      } catch (error) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
     
     const result = await query(
       'SELECT file_path, mime_type FROM assets WHERE id = $1 AND (owner_id = $2 OR is_public = true)',
-      [id, req.user.userId]
+      [id, userId]
     );
 
     if (result.rows.length === 0) {
@@ -340,12 +364,24 @@ router.get('/file/:id', authenticateToken, async (req, res) => {
 
     const asset = result.rows[0];
 
-    if (!fs.existsSync(asset.file_path)) {
+    // Resolve full file path (handle both relative and absolute paths)
+    const fullPath = path.isAbsolute(asset.file_path) 
+      ? asset.file_path 
+      : path.join(__dirname, '..', asset.file_path);
+
+    if (!fs.existsSync(fullPath)) {
+      console.error('File not found:', fullPath);
       return res.status(404).json({ error: 'File not found on disk' });
     }
 
+    // Set CORS headers for cross-origin image requests
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins for public assets
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Content-Type', asset.mime_type);
-    res.sendFile(path.resolve(asset.file_path));
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
+    res.sendFile(fullPath);
 
   } catch (error) {
     console.error('Serve asset error:', error);

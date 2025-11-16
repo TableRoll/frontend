@@ -3,12 +3,13 @@ setlocal enabledelayedexpansion
 
 REM D&D Campaign Management System - Docker Startup Script for Windows
 
-echo Starting D&D Campaign Management System with Docker...
+echo Starting DnD Campaign Management System with Docker...
 
 REM Check if Docker is running
 docker info >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Docker is not running. Please start Docker Desktop and try again.
+    pause
     exit /b 1
 )
 
@@ -16,6 +17,7 @@ REM Check if docker-compose is available
 docker-compose --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: docker-compose is not installed. Please install Docker Compose.
+    pause
     exit /b 1
 )
 

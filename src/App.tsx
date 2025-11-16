@@ -42,13 +42,16 @@ function App() {
     updateViewport,
     loadCampaigns,
     loadCharacters,
-    loadAssets
+    loadAssets,
+    loadMaps
   } = useMapStore();
 
   // Load data on app startup
   useEffect(() => {
     const loadInitialData = async () => {
       try {
+        // Load maps first (they're independent of campaigns)
+        await loadMaps();
         await loadCampaigns();
         await loadCharacters();
         await loadAssets();
@@ -58,7 +61,7 @@ function App() {
     };
 
     loadInitialData();
-  }, [loadCampaigns, loadCharacters, loadAssets]);
+  }, [loadMaps, loadCampaigns, loadCharacters, loadAssets]);
 
   // Handle token movement
   const handleTokenMove = (event: TokenMoveEvent) => {
@@ -113,7 +116,7 @@ function App() {
 
   return (
     <MantineProvider theme={theme}>
-      <Notifications />
+      <Notifications position="top-right" limit={5} />
       <ModalsProvider>
         <AuthWrapper>
           <AppShell>
