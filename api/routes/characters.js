@@ -1,35 +1,9 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { query, transaction } = require('../config/sqlite-database');
+const { query, transaction } = require('../config/database');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-// JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-
-  // For development, accept mock token
-  if (token === 'mock-token-for-development') {
-    req.user = { id: 'mock-user', email: 'dev@example.com' };
-    return next();
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-};
 
 // Get all characters for a user
 router.get('/', authenticateToken, async (req, res) => {
@@ -214,9 +188,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create new character
 router.post('/', authenticateToken, [
   body('name').isLength({ min: 1, max: 100 }).trim(),
-  body('raceId').isUUID(),
-  body('classId').isUUID(),
-  body('backgroundId').isUUID(),
+  body('raceId').notEmpty(),
+  body('classId').notEmpty(),
+  body('backgroundId').notEmpty(),
   body('level').isInt({ min: 1, max: 20 }),
   body('abilityScores').isObject(),
   body('abilityScores.str').isInt({ min: 1, max: 30 }),
@@ -248,6 +222,38 @@ router.post('/', authenticateToken, [
       size
     } = req.body;
 
+    // Look up race, class, and background IDs by name if they're not UUIDs
+    let actualRaceId = raceId;
+    let actualClassId = classId;
+    let actualBackgroundId = backgroundId;
+
+    // Check if raceId is a name (not UUID) and look it up
+    if (!raceId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      const raceResult = await query('SELECT id FROM races WHERE name = $1', [raceId]);
+      if (raceResult.rows.length === 0) {
+        return res.status(400).json({ error: `Race '${raceId}' not found` });
+      }
+      actualRaceId = raceResult.rows[0].id;
+    }
+
+    // Check if classId is a name (not UUID) and look it up
+    if (!classId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      const classResult = await query('SELECT id FROM classes WHERE name = $1', [classId]);
+      if (classResult.rows.length === 0) {
+        return res.status(400).json({ error: `Class '${classId}' not found` });
+      }
+      actualClassId = classResult.rows[0].id;
+    }
+
+    // Check if backgroundId is a name (not UUID) and look it up
+    if (!backgroundId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      const backgroundResult = await query('SELECT id FROM backgrounds WHERE name = $1', [backgroundId]);
+      if (backgroundResult.rows.length === 0) {
+        return res.status(400).json({ error: `Background '${backgroundId}' not found` });
+      }
+      actualBackgroundId = backgroundResult.rows[0].id;
+    }
+
     // Calculate HP if not provided
     const calculatedHp = hpMax || (8 + Math.floor((abilityScores.con - 10) / 2));
 
@@ -259,8 +265,8 @@ router.post('/', authenticateToken, [
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *
     `, [
-      name, description || '', imageUrl || null, campaignId || null, req.user.userId,
-      raceId, classId, backgroundId, level,
+      name, description || '', imageUrl || null, campaignId || null, req.user.id,
+      actualRaceId, actualClassId, actualBackgroundId, level,
       abilityScores.str, abilityScores.dex, abilityScores.con,
       abilityScores.int, abilityScores.wis, abilityScores.cha,
       calculatedHp, calculatedHp, armorClass || 10, speed || 30, size || 'medium'

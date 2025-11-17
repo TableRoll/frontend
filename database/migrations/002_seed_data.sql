@@ -103,7 +103,7 @@ INSERT INTO classes (name, description, hit_die, primary_ability, saving_throw_p
  '{"level_1": ["Spellcasting", "Sorcerous Origin", "Spell Points"]}', 'cha'),
 
 ('Warlock', 'Spellcasters who gain power through pacts with otherworldly beings.',
- 8, 'cha', '[''wis'', ''cha'']', '["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"]',
+ 8, 'cha', '["wis", "cha"]', '["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"]',
  '{"weapons": ["Light crossbow", "Dagger"], "tools": ["Scholar''s pack"]}',
  '{"level_1": ["Spellcasting", "Otherworldly Patron", "Pact Magic"]}', 'cha');
 
@@ -331,7 +331,7 @@ SELECT
         WHEN it.category = 'consumable' THEN 50
         ELSE 0
     END,
-    CASE 
+    (CASE 
         WHEN it.name = 'Dagger' THEN '["finesse", "light", "thrown"]'
         WHEN it.name IN ('Shortsword', 'Rapier', 'Scimitar') THEN '["finesse", "light"]'
         WHEN it.name = 'Handaxe' THEN '["light", "thrown"]'
@@ -343,7 +343,7 @@ SELECT
         WHEN it.name = 'Javelin' THEN '["thrown"]'
         WHEN it.name = 'Shield' THEN '["shield"]'
         ELSE '[]'
-    END,
+    END)::jsonb,
     CASE 
         WHEN it.category = 'story' THEN 'artifact'
         WHEN it.name IN ('Potion of healing', 'Antitoxin') THEN 'common'

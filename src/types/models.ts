@@ -3,6 +3,8 @@
 export interface Map {
   id: string;
   name: string;
+  description?: string;
+  assetId?: string;
   widthPx: number;
   heightPx: number;
   tileSource?: string;
@@ -86,7 +88,8 @@ export type PlayerRole = 'gm' | 'player';
 export interface Campaign {
   id: string;
   name: string;
-  mapId: string;
+  mapId?: string; // Deprecated, use currentMapId
+  currentMapId?: string; // Current active map for the campaign
   tokens: Token[];
   active: boolean;
   description?: string;

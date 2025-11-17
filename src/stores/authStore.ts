@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { authAPI, setAuthToken, removeAuthToken } from '../services/api';
 
 export interface User {
   id: string;
@@ -56,59 +57,47 @@ interface AuthStore extends AuthState {
   updateUser: (updates: Partial<User>) => void;
 }
 
-// Mock authentication service
-const mockAuthService = {
+// Real authentication service using the API
+const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock validation
-    if (credentials.email === 'demo@example.com' && credentials.password === 'password') {
-      return {
-        user: {
-          id: 'user_1',
-          email: credentials.email,
-          username: 'demo_user',
-          displayName: 'Demo User',
-          role: 'user',
-          isEmailVerified: true,
-          createdAt: new Date('2024-01-01'),
-          updatedAt: new Date()
-        },
-        token: 'mock-jwt-token',
-        refreshToken: 'mock-refresh-token'
-      };
-    }
-    
-    throw new Error('Invalid email or password');
-  },
-
-  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock validation
-    if (credentials.password !== credentials.confirmPassword) {
-      throw new Error('Passwords do not match');
-    }
-    
-    if (credentials.email === 'existing@example.com') {
-      throw new Error('Email already exists');
-    }
+    const response = await authAPI.login(credentials);
     
     return {
       user: {
-        id: `user_${Date.now()}`,
-        email: credentials.email,
-        username: credentials.username,
-        displayName: credentials.displayName,
-        role: 'user',
-        isEmailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        id: response.user.id,
+        email: response.user.email,
+        username: response.user.username,
+        displayName: response.user.displayName,
+        avatar: response.user.avatar,
+        role: response.user.role,
+        isEmailVerified: response.user.isEmailVerified,
+        createdAt: new Date(response.user.createdAt),
+        updatedAt: new Date(response.user.updatedAt),
+        lastLoginAt: response.user.lastLoginAt ? new Date(response.user.lastLoginAt) : undefined
       },
-      token: 'mock-jwt-token',
-      refreshToken: 'mock-refresh-token'
+      token: response.token,
+      refreshToken: response.token // Backend doesn't have separate refresh token yet
+    };
+  },
+
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+    const response = await authAPI.register(credentials);
+    
+    return {
+      user: {
+        id: response.user.id,
+        email: response.user.email,
+        username: response.user.username,
+        displayName: response.user.displayName,
+        avatar: response.user.avatar,
+        role: response.user.role,
+        isEmailVerified: response.user.isEmailVerified,
+        createdAt: new Date(response.user.createdAt),
+        updatedAt: new Date(response.user.updatedAt),
+        lastLoginAt: response.user.lastLoginAt ? new Date(response.user.lastLoginAt) : undefined
+      },
+      token: response.token,
+      refreshToken: response.token
     };
   }
 };
@@ -128,7 +117,10 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: true, error: null });
           
           try {
-            const response = await mockAuthService.login(credentials);
+            const response = await authService.login(credentials);
+            // Store token in localStorage
+            setAuthToken(response.token);
+            
             set({
               user: response.user,
               isAuthenticated: true,
@@ -152,7 +144,10 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: true, error: null });
           
           try {
-            const response = await mockAuthService.register(credentials);
+            const response = await authService.register(credentials);
+            // Store token in localStorage
+            setAuthToken(response.token);
+            
             set({
               user: response.user,
               isAuthenticated: true,
@@ -173,6 +168,9 @@ export const useAuthStore = create<AuthStore>()(
         },
 
         logout: () => {
+          // Remove token from localStorage
+          removeAuthToken();
+          
           set({
             user: null,
             isAuthenticated: false,

@@ -141,7 +141,7 @@ export const CharactersView: React.FC = () => {
           opened={characterCreatorOpened}
           onClose={handleCloseCreator}
           onSave={handleSaveCharacter}
-          campaignId="default_campaign"
+          campaignId=""
         />
       </Container>
     );

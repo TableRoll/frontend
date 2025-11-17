@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   Stepper,
@@ -19,7 +19,8 @@ import {
   Center,
   Select,
   Divider,
-  Alert
+  Alert,
+  Loader
 } from '@mantine/core';
 import {
   IconCheck,
@@ -216,9 +217,16 @@ const backgroundOptions: Record<CharacterBackground, BackgroundBonus> = {
 export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onClose, onSave, campaignId }) => {
   const [active, setActive] = useState(0);
 
+  // API data
+  const [apiRaces, setApiRaces] = useState<any[]>([]);
+  const [apiClasses, setApiClasses] = useState<any[]>([]);
+  const [apiBackgrounds, setApiBackgrounds] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Character data
-  const [selectedRace, setSelectedRace] = useState<CharacterRace | null>(null);
-  const [selectedClass, setSelectedClass] = useState<CharacterClass | null>(null);
+  const [selectedRace, setSelectedRace] = useState<string | null>(null);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [abilityScores, setAbilityScores] = useState<AbilityScores>({
     strength: 10,
     dexterity: 10,
@@ -233,8 +241,35 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
   const [selectedBackpack, setSelectedBackpack] = useState<BackpackType>('medium');
   const [characterName, setCharacterName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedBackground, setSelectedBackground] = useState<CharacterBackground | null>(null);
+  const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<string>('');
+
+  // Fetch races, classes, and backgrounds from API
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        setLoading(true);
+        const [racesData, classesData, backgroundsData] = await Promise.all([
+          charactersAPI.getRaces(),
+          charactersAPI.getClasses(),
+          charactersAPI.getBackgrounds()
+        ]);
+        setApiRaces(racesData.races || []);
+        setApiClasses(classesData.classes || []);
+        setApiBackgrounds(backgroundsData.backgrounds || []);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch reference data:', err);
+        setError('Failed to load character options');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (opened) {
+      fetchReferenceData();
+    }
+  }, [opened]);
 
   const nextStep = () => setActive((current) => (current < 4 ? current + 1 : current));
   const prevStep = () => setActive((current) => (current > 0 ? current - 1 : current));
@@ -246,22 +281,17 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
   const getTotalAbilityScore = (ability: keyof AbilityScores): number => {
     let total = abilityScores[ability];
     
-    // Add racial bonus
-    if (selectedRace && races[selectedRace].bonuses[ability]) {
-      total += races[selectedRace].bonuses[ability]!;
-    }
-    
-    // Add background bonus
-    if (selectedBackground && backgroundOptions[selectedBackground].abilityBonus?.[ability]) {
-      total += backgroundOptions[selectedBackground].abilityBonus![ability]!;
-    }
+    // Bonuses from race/background will be handled by the API
+    // For now, just return the base score for display
     
     return total;
   };
 
   const calculateHP = (): number => {
     if (!selectedClass) return 10;
-    const hitDie = classes[selectedClass].hitDie;
+    // Find the selected class from API data
+    const classData = apiClasses.find(c => c.name === selectedClass);
+    const hitDie = classData?.hit_die || 8;
     const totalCon = getTotalAbilityScore('constitution');
     const conMod = calculateModifier(totalCon);
     return hitDie + conMod;
@@ -275,7 +305,8 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
   };
 
   const getStartingGold = (): number => {
-    return selectedBackground ? backgroundOptions[selectedBackground].gold : 10;
+    // Default starting gold, API will handle actual equipment/gold
+    return 10;
   };
 
   const handleAvatarUpload = (file: File | null) => {
@@ -294,28 +325,24 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
     }
 
     try {
-      // Calculate final ability scores with all bonuses
-      const finalAbilityScores: AbilityScores = {
-        strength: getTotalAbilityScore('strength'),
-        dexterity: getTotalAbilityScore('dexterity'),
-        constitution: getTotalAbilityScore('constitution'),
-        intelligence: getTotalAbilityScore('intelligence'),
-        wisdom: getTotalAbilityScore('wisdom'),
-        charisma: getTotalAbilityScore('charisma')
-      };
-
-      // Equipment will be handled by the API based on class/background
-
+      // API expects ability scores with short names (str, dex, con, int, wis, cha)
       const characterData = {
         name: characterName,
         description,
         imageUrl: avatar,
-        campaignId,
-        raceId: selectedRace, // This should be the race ID from the API
-        classId: selectedClass, // This should be the class ID from the API
-        backgroundId: selectedBackground, // This should be the background ID from the API
+        campaignId: campaignId || null, // Send null if no campaign
+        raceId: selectedRace, // Race name from API
+        classId: selectedClass, // Class name from API
+        backgroundId: selectedBackground, // Background name from API
         level: 1,
-        abilityScores: finalAbilityScores,
+        abilityScores: {
+          str: abilityScores.strength,
+          dex: abilityScores.dexterity,
+          con: abilityScores.constitution,
+          int: abilityScores.intelligence,
+          wis: abilityScores.wisdom,
+          cha: abilityScores.charisma
+        },
         hpMax: calculateHP(),
         armorClass: calculateAC(),
         speed: 30,
@@ -331,7 +358,7 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
       handleClose();
     } catch (error) {
       console.error('Failed to create character:', error);
-      // You might want to show an error message to the user here
+      setError('Failed to create character. Please try again.');
     }
   };
 
@@ -373,43 +400,39 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
             <Text size="lg" fw={600}>Choose Your Race</Text>
             <Text size="sm" c="dimmed">Each race has unique ability bonuses and traits</Text>
             
-            <SimpleGrid cols={2} spacing="md">
-              {(Object.keys(races) as CharacterRace[]).map((raceKey) => {
-                const race = races[raceKey];
-                return (
+            {loading ? (
+              <Center py="xl">
+                <Loader />
+              </Center>
+            ) : error ? (
+              <Alert color="red">{error}</Alert>
+            ) : (
+              <SimpleGrid cols={2} spacing="md">
+                {apiRaces.map((race) => (
                   <Card
-                    key={raceKey}
+                    key={race.name}
                     withBorder
                     p="md"
                     style={{
                       cursor: 'pointer',
-                      border: selectedRace === raceKey ? '2px solid #228be6' : '1px solid #dee2e6',
-                      backgroundColor: selectedRace === raceKey ? '#e7f5ff' : 'white'
+                      border: selectedRace === race.name ? '2px solid #228be6' : '1px solid #dee2e6',
+                      backgroundColor: selectedRace === race.name ? '#e7f5ff' : 'white'
                     }}
-                    onClick={() => setSelectedRace(raceKey)}
+                    onClick={() => setSelectedRace(race.name)}
                   >
                     <Stack gap="xs">
                       <Group justify="space-between">
                         <Text fw={600}>{race.name}</Text>
-                        {selectedRace === raceKey && (
+                        {selectedRace === race.name && (
                           <Badge color="blue" size="sm">Selected</Badge>
                         )}
                       </Group>
-                      <Text size="sm" c="dimmed">{race.description}</Text>
-                      <Divider />
-                      <Text size="xs" fw={500}>Ability Bonuses:</Text>
-                      <Group gap="xs">
-                        {Object.entries(race.bonuses).map(([stat, bonus]) => (
-                          <Badge key={stat} size="xs" variant="light">
-                            {stat.slice(0, 3).toUpperCase()} +{bonus}
-                          </Badge>
-                        ))}
-                      </Group>
+                      <Text size="sm" c="dimmed">{race.description || 'No description available'}</Text>
                     </Stack>
                   </Card>
-                );
-              })}
-            </SimpleGrid>
+                ))}
+              </SimpleGrid>
+            )}
           </Stack>
         </Stepper.Step>
 
@@ -419,45 +442,46 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
             <Text size="lg" fw={600}>Choose Your Class</Text>
             <Text size="sm" c="dimmed">Your class determines your abilities and playstyle</Text>
             
-            <SimpleGrid cols={2} spacing="md">
-              {(Object.keys(classes) as CharacterClass[]).map((classKey) => {
-                const charClass = classes[classKey];
-                return (
+            {loading ? (
+              <Center py="xl">
+                <Loader />
+              </Center>
+            ) : error ? (
+              <Alert color="red">{error}</Alert>
+            ) : (
+              <SimpleGrid cols={2} spacing="md">
+                {apiClasses.map((charClass) => (
                   <Card
-                    key={classKey}
+                    key={charClass.name}
                     withBorder
                     p="md"
                     style={{
                       cursor: 'pointer',
-                      border: selectedClass === classKey ? '2px solid #228be6' : '1px solid #dee2e6',
-                      backgroundColor: selectedClass === classKey ? '#e7f5ff' : 'white'
+                      border: selectedClass === charClass.name ? '2px solid #228be6' : '1px solid #dee2e6',
+                      backgroundColor: selectedClass === charClass.name ? '#e7f5ff' : 'white'
                     }}
-                    onClick={() => setSelectedClass(classKey)}
+                    onClick={() => setSelectedClass(charClass.name)}
                   >
                     <Stack gap="xs">
                       <Group justify="space-between">
                         <Text fw={600}>{charClass.name}</Text>
-                        {selectedClass === classKey && (
+                        {selectedClass === charClass.name && (
                           <Badge color="blue" size="sm">Selected</Badge>
                         )}
                       </Group>
-                      <Text size="sm" c="dimmed">{charClass.description}</Text>
+                      <Text size="sm" c="dimmed">{charClass.description || 'No description available'}</Text>
                       <Divider />
                       <Group gap="md">
                         <Box>
                           <Text size="xs" c="dimmed">Hit Die</Text>
-                          <Text size="sm" fw={600}>d{charClass.hitDie}</Text>
-                        </Box>
-                        <Box>
-                          <Text size="xs" c="dimmed">Primary</Text>
-                          <Text size="sm" fw={600}>{charClass.primaryStat.slice(0, 3).toUpperCase()}</Text>
+                          <Text size="sm" fw={600}>d{charClass.hit_die}</Text>
                         </Box>
                       </Group>
                     </Stack>
                   </Card>
-                );
-              })}
-            </SimpleGrid>
+                ))}
+              </SimpleGrid>
+            )}
           </Stack>
         </Stepper.Step>
 
@@ -470,9 +494,7 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
             <Grid>
               {(Object.keys(abilityScores) as (keyof AbilityScores)[]).map((ability) => {
                 const score = abilityScores[ability];
-                const raceBonus = (selectedRace && races[selectedRace].bonuses[ability]) || 0;
-                const backgroundBonus = (selectedBackground && backgroundOptions[selectedBackground].abilityBonus?.[ability]) || 0;
-                const totalScore = score + raceBonus + backgroundBonus;
+                const totalScore = score;
                 const totalModifier = calculateModifier(totalScore);
                 
                 return (
@@ -481,15 +503,7 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
                       <Stack gap="xs">
                         <Group justify="space-between">
                           <Text fw={600} tt="capitalize">{ability}</Text>
-                          <Group gap="xs">
-                            <Badge color="blue" size="lg">{totalScore}</Badge>
-                            {raceBonus > 0 && (
-                              <Badge color="green" size="sm" title="Racial Bonus">+{raceBonus}</Badge>
-                            )}
-                            {backgroundBonus > 0 && (
-                              <Badge color="purple" size="sm" title="Background Bonus">+{backgroundBonus}</Badge>
-                            )}
-                          </Group>
+                          <Badge color="blue" size="lg">{totalScore}</Badge>
                         </Group>
                         <NumberInput
                           value={score}
@@ -653,53 +667,19 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
                     <Select
                       label="Background"
                       placeholder="Choose a background"
-                      data={[
-                        { value: 'noble', label: 'Noble' },
-                        { value: 'soldier', label: 'Soldier' },
-                        { value: 'sage', label: 'Sage' },
-                        { value: 'criminal', label: 'Criminal' },
-                        { value: 'folk_hero', label: 'Folk Hero' },
-                        { value: 'acolyte', label: 'Acolyte' },
-                        { value: 'entertainer', label: 'Entertainer' },
-                        { value: 'guild_artisan', label: 'Guild Artisan' }
-                      ]}
+                      data={apiBackgrounds.map(bg => ({ value: bg.name, label: bg.name }))}
                       value={selectedBackground}
-                      onChange={(value) => setSelectedBackground(value as CharacterBackground)}
+                      onChange={(value) => setSelectedBackground(value)}
                       required
                     />
                     {selectedBackground && (
                       <Card withBorder p="sm" mt="xs" style={{ backgroundColor: '#f8f9fa' }}>
                         <Stack gap="xs">
-                          <Text size="sm" fw={500}>{backgroundOptions[selectedBackground].name}</Text>
-                          <Text size="xs" c="dimmed">{backgroundOptions[selectedBackground].description}</Text>
-                          <Divider />
-                          <Group gap="xs">
-                            <Badge color="yellow" size="sm">
-                              {backgroundOptions[selectedBackground].gold} Gold
-                            </Badge>
-                            {backgroundOptions[selectedBackground].abilityBonus && 
-                              Object.entries(backgroundOptions[selectedBackground].abilityBonus!).map(([stat, bonus]) => (
-                                <Badge key={stat} color="purple" size="sm">
-                                  {stat.slice(0, 3).toUpperCase()} +{bonus}
-                                </Badge>
-                              ))
-                            }
-                          </Group>
-                          {backgroundOptions[selectedBackground].items && (
-                            <Box>
-                              <Text size="xs" fw={500}>Starting Items:</Text>
-                              <Text size="xs" c="dimmed">
-                                {backgroundOptions[selectedBackground].items!.join(', ')}
-                              </Text>
-                            </Box>
-                          )}
-                          {backgroundOptions[selectedBackground].skills && (
-                            <Box>
-                              <Text size="xs" fw={500}>Skills:</Text>
-                              <Text size="xs" c="dimmed">
-                                {backgroundOptions[selectedBackground].skills!.join(', ')}
-                              </Text>
-                            </Box>
+                          <Text size="sm" fw={500}>{selectedBackground}</Text>
+                          {apiBackgrounds.find(bg => bg.name === selectedBackground)?.description && (
+                            <Text size="xs" c="dimmed">
+                              {apiBackgrounds.find(bg => bg.name === selectedBackground)?.description}
+                            </Text>
                           )}
                         </Stack>
                       </Card>
@@ -817,12 +797,12 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
 
                     <Box>
                       <Text size="xs" c="dimmed">Race</Text>
-                      <Text size="sm" fw={500}>{selectedRace ? races[selectedRace].name : '-'}</Text>
+                      <Text size="sm" fw={500}>{selectedRace || '-'}</Text>
                     </Box>
 
                     <Box>
                       <Text size="xs" c="dimmed">Class</Text>
-                      <Text size="sm" fw={500}>{selectedClass ? classes[selectedClass].name : '-'}</Text>
+                      <Text size="sm" fw={500}>{selectedClass || '-'}</Text>
                     </Box>
 
                     <Box>
@@ -832,9 +812,7 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
 
                     <Box>
                       <Text size="xs" c="dimmed">Background</Text>
-                      <Text size="sm" fw={500}>
-                        {selectedBackground ? backgroundOptions[selectedBackground].name : '-'}
-                      </Text>
+                      <Text size="sm" fw={500}>{selectedBackground || '-'}</Text>
                     </Box>
 
                     <Divider />

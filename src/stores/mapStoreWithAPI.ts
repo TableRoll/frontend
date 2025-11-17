@@ -26,10 +26,43 @@ import {
   charactersAPI, 
   assetsAPI, 
   combatAPI,
+  mapsAPI,
   setAuthToken,
   removeAuthToken,
   isAuthenticated
 } from '../services/api';
+
+// Helper function to transform API map response to frontend Map interface
+const transformMapFromAPI = (m: any): Map => {
+  // Build image URL from asset ID if available
+  const imageUrl = m.assetId ? assetsAPI.getFileUrl(m.assetId) : (m.imageUrl || '');
+  
+  console.log('🔄 Transforming map from API:', {
+    id: m.id,
+    name: m.name,
+    assetId: m.assetId,
+    hasImageUrl: !!imageUrl,
+    imageUrl: imageUrl ? imageUrl.substring(0, 100) + '...' : 'NO URL'
+  });
+  
+  return {
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    assetId: m.assetId,
+    widthPx: m.widthPx,
+    heightPx: m.heightPx,
+    thumbnail: imageUrl,
+    tileSource: imageUrl,
+    layers: [
+      { id: 'bg', type: 'background' as const, name: 'Background', visible: true, opacity: 1, locked: false, order: 0 },
+      { id: 'grid', type: 'grid' as const, name: 'Grid', visible: true, opacity: 0.5, locked: false, order: 1, gridType: m.gridType || 'square', gridSize: m.gridSize || 50 },
+      { id: 'tokens', type: 'tokens' as const, name: 'Tokens', visible: true, opacity: 1, locked: false, order: 2 }
+    ],
+    createdAt: new Date(m.createdAt),
+    updatedAt: new Date(m.updatedAt)
+  };
+};
 
 interface MapStore extends AppState {
   // Maps
@@ -66,16 +99,17 @@ interface MapStore extends AppState {
   
   // Actions - Maps
   setCurrentMap: (map: Map | null) => void;
-  addMap: (map: Map) => Promise<void>;
+  addMap: (map: Map) => Promise<Map>;
   updateMap: (id: string, updates: Partial<Map>) => Promise<void>;
   deleteMap: (id: string) => Promise<void>;
+  deactivateMap: () => void;
   
   // Actions - Campaigns
   setCurrentCampaign: (campaign: Campaign | null) => Promise<void>;
   addCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateCampaign: (id: string, updates: Partial<Campaign>) => Promise<void>;
   deleteCampaign: (id: string) => Promise<void>;
-  changeCampaignMap: (campaignId: string, mapId: string) => Promise<void>;
+  changeCampaignMap: (mapId: string) => Promise<void>;
   
   // Actions - Characters
   addCharacter: (character: Omit<Character, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
@@ -123,6 +157,7 @@ interface MapStore extends AppState {
   
   // Actions - GM
   setGM: (isGM: boolean) => void;
+  toggleGM: () => void;
   
   // Actions - Loading
   setLoading: (loading: boolean) => void;
@@ -132,9 +167,11 @@ interface MapStore extends AppState {
   loadCampaigns: () => Promise<void>;
   loadCharacters: (campaignId?: string) => Promise<void>;
   loadAssets: (campaignId?: string) => Promise<void>;
+  loadMaps: (campaignId?: string) => Promise<void>;
   
   // Actions - Export/Import
   exportData: () => ExportData;
+  exportScene: () => ExportData | null; // Alias for exportData for backwards compatibility
   importData: (data: ExportData) => void;
 }
 
@@ -195,12 +232,36 @@ export const useMapStore = create<MapStore>()(
       addMap: async (map) => {
         try {
           set({ isLoading: true, error: null });
-          // For now, we'll add to local state since maps aren't in the API yet
+          
+          // Always create map in API - maps are independent of campaigns
+          const mapData: any = {
+            name: map.name,
+            description: map.description || '',
+            widthPx: map.widthPx,
+            heightPx: map.heightPx,
+            gridSize: 50,
+            gridType: 'square'
+          };
+          
+          // Include assetId if available (for map images)
+          if (map.assetId) {
+            mapData.assetId = map.assetId;
+          }
+          
+          // Don't include campaignId - maps are independent
+          // Campaigns reference maps via currentMapId
+          
+          const response = await mapsAPI.create(mapData);
+          const transformedMap = transformMapFromAPI(response.map);
+          
           set((state) => ({
-            maps: [...state.maps, { ...map, id: `map_${Date.now()}`, createdAt: new Date(), updatedAt: new Date() }]
+            maps: [...state.maps, transformedMap]
           }));
+          
+          return transformedMap;
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to add map' });
+          throw error;
         } finally {
           set({ isLoading: false });
         }
@@ -235,15 +296,64 @@ export const useMapStore = create<MapStore>()(
         }
       },
       
+      deactivateMap: () => set({
+        currentMap: null,
+        currentCampaign: null,
+        selectedTokens: { tokenIds: [] },
+        viewport: { x: 0, y: 0, zoom: 1, rotation: 0 }
+      }),
+      
       // Actions - Campaigns
       setCurrentCampaign: async (campaign) => {
         try {
           set({ isLoading: true, error: null });
           set({ currentCampaign: campaign });
           if (campaign) {
-            // Load characters and assets for the campaign
-            await get().loadCharacters(campaign.id);
-            await get().loadAssets(campaign.id);
+            // Load characters, assets, and maps for the campaign
+            // Maps are independent - load all maps (not filtered by campaign)
+            // Load maps FIRST so they're available when we try to find the campaign's map
+            await get().loadMaps();
+            await Promise.all([
+              get().loadCharacters(campaign.id),
+              get().loadAssets(campaign.id)
+            ]);
+            
+            // Automatically load the campaign's current map if it has one
+            if (campaign.currentMapId || campaign.mapId) {
+              const mapId = campaign.currentMapId || campaign.mapId;
+              if (mapId) {
+                const state = get();
+                console.log('🔍 Looking for map:', mapId, 'Available maps:', state.maps.map(m => m.id));
+                const map = state.maps.find(m => m.id === mapId);
+                if (map) {
+                  console.log('✅ Found map in cache:', map.name, 'URL:', map.tileSource || map.thumbnail);
+                  set({ currentMap: map });
+                  // Verify the map was set
+                  const updatedState = get();
+                  console.log('🔍 After setting map, currentMap:', {
+                    hasMap: !!updatedState.currentMap,
+                    mapId: updatedState.currentMap?.id,
+                    mapName: updatedState.currentMap?.name,
+                    hasImageUrl: !!(updatedState.currentMap?.tileSource || updatedState.currentMap?.thumbnail)
+                  });
+                } else {
+                  // If map not in cache, fetch it
+                  try {
+                    console.log('⚠️ Map not in cache, fetching from API:', mapId);
+                    const mapData = await mapsAPI.getById(mapId);
+                    if (mapData.map) {
+                      const transformedMap = transformMapFromAPI(mapData.map);
+                      console.log('✅ Fetched map from API:', transformedMap.name, 'URL:', transformedMap.tileSource || transformedMap.thumbnail);
+                      set({ currentMap: transformedMap });
+                    }
+                  } catch (err) {
+                    console.error('❌ Failed to load campaign map:', err);
+                  }
+                }
+              }
+            }
+          } else {
+            set({ currentMap: null });
           }
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to set current campaign' });
@@ -288,27 +398,76 @@ export const useMapStore = create<MapStore>()(
       deleteCampaign: async (id) => {
         try {
           set({ isLoading: true, error: null });
+          console.log('🗑️ Deleting campaign:', id);
           await campaignsAPI.delete(id);
-          set((state) => ({
-            campaigns: state.campaigns.filter(campaign => campaign.id !== id),
-            currentCampaign: state.currentCampaign?.id === id ? null : state.currentCampaign
-          }));
+          console.log('✅ Campaign deleted from API');
+          set((state) => {
+            const updatedCampaigns = state.campaigns.filter(campaign => campaign.id !== id);
+            console.log('✅ Campaign removed from store. Remaining campaigns:', updatedCampaigns.length);
+            return {
+              campaigns: updatedCampaigns,
+              currentCampaign: state.currentCampaign?.id === id ? null : state.currentCampaign,
+              currentMap: state.currentCampaign?.id === id ? null : state.currentMap
+            };
+          });
         } catch (error) {
-          set({ error: error instanceof Error ? error.message : 'Failed to delete campaign' });
+          console.error('❌ Failed to delete campaign:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Failed to delete campaign';
+          set({ error: errorMessage });
+          throw error; // Re-throw so the caller can handle it
         } finally {
           set({ isLoading: false });
         }
       },
       
-      changeCampaignMap: async (campaignId, mapId) => {
+      changeCampaignMap: async (mapId) => {
         try {
           set({ isLoading: true, error: null });
+          const state = get();
+          
+          if (!state.currentCampaign) {
+            throw new Error('No active campaign to change map for');
+          }
+          
+          const campaignId = state.currentCampaign.id;
           await campaignsAPI.update(campaignId, { current_map_id: mapId });
-          set((state) => ({
-            campaigns: state.campaigns.map(campaign => 
-              campaign.id === campaignId ? { ...campaign, currentMapId: mapId } : campaign
-            )
-          }));
+          
+          // Update campaigns list and current campaign
+          set((state) => {
+            const updatedCampaign = state.currentCampaign?.id === campaignId 
+              ? { ...state.currentCampaign, currentMapId: mapId, mapId: mapId } 
+              : state.currentCampaign;
+            
+            return {
+              campaigns: state.campaigns.map(campaign => 
+                campaign.id === campaignId ? { ...campaign, currentMapId: mapId, mapId: mapId } : campaign
+              ),
+              currentCampaign: updatedCampaign
+            };
+          });
+          
+          // If this is the current campaign, also load the new map
+          const updatedState = get();
+          if (updatedState.currentCampaign?.id === campaignId) {
+            const map = updatedState.maps.find(m => m.id === mapId);
+            if (map) {
+              console.log('✅ Found new map in cache:', map.name);
+              set({ currentMap: map });
+            } else {
+              // If map not in cache, fetch it
+              try {
+                console.log('⚠️ Map not in cache, fetching from API:', mapId);
+                const mapData = await mapsAPI.getById(mapId);
+                if (mapData.map) {
+                  const transformedMap = transformMapFromAPI(mapData.map);
+                  console.log('✅ Fetched new map from API:', transformedMap.name);
+                  set({ currentMap: transformedMap });
+                }
+              } catch (err) {
+                console.error('❌ Failed to load new campaign map:', err);
+              }
+            }
+          }
         } catch (error) {
           set({ error: error instanceof Error ? error.message : 'Failed to change campaign map' });
         } finally {
@@ -543,6 +702,7 @@ export const useMapStore = create<MapStore>()(
       
       // Actions - GM
       setGM: (isGM) => set({ isGM }),
+      toggleGM: () => set((state) => ({ isGM: !state.isGM })),
       
       // Actions - Loading
       setLoading: (loading) => set({ isLoading: loading }),
@@ -585,14 +745,57 @@ export const useMapStore = create<MapStore>()(
         }
       },
       
+      loadMaps: async (campaignId) => {
+        try {
+          set({ isLoading: true, error: null });
+          // Maps are independent - don't filter by campaignId
+          // If campaignId is provided, ignore it (for backwards compatibility)
+          const response = await mapsAPI.getAll();
+          console.log('📥 Loaded maps from API:', {
+            count: response.maps?.length || 0,
+            maps: response.maps?.map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              assetId: m.assetId,
+              hasAssetId: !!m.assetId
+            }))
+          });
+          // Transform API response to match frontend Map interface
+          const transformedMaps = response.maps.map(transformMapFromAPI);
+          console.log('✅ Transformed maps:', transformedMaps.map((m: Map) => ({
+            id: m.id,
+            name: m.name,
+            hasImageUrl: !!(m.tileSource || m.thumbnail)
+          })));
+          set({ maps: transformedMaps });
+        } catch (error) {
+          console.error('❌ Failed to load maps:', error);
+          set({ error: error instanceof Error ? error.message : 'Failed to load maps' });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+      
       // Actions - Export/Import
       exportData: () => {
         const state = get();
         return {
           version: '1.0.0',
           map: state.currentMap || state.maps[0] || {} as Map,
-          tokens: [], // This would need to be implemented based on your token storage
+          tokens: state.currentCampaign?.tokens || [], // Get tokens from current campaign
           layers: state.currentMap?.layers || [],
+          viewport: state.viewport,
+          exportedAt: new Date()
+        };
+      },
+      exportScene: () => {
+        const state = get();
+        if (!state.currentMap || !state.currentCampaign) return null;
+        return {
+          version: '1.0.0',
+          map: state.currentMap,
+          tokens: state.currentCampaign.tokens || [],
+          layers: state.currentMap.layers,
           viewport: state.viewport,
           exportedAt: new Date()
         };

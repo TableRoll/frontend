@@ -10,16 +10,20 @@ const characterRoutes = require('./routes/characters');
 const campaignRoutes = require('./routes/campaigns');
 const assetRoutes = require('./routes/assets');
 const combatRoutes = require('./routes/combat');
-const { testConnection } = require('./config/sqlite-database');
+const mapRoutes = require('./routes/maps');
+const { testConnection } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow images to load cross-origin
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['Content-Type', 'Content-Length']
 }));
 
 // Rate limiting
@@ -52,6 +56,7 @@ app.use('/api/characters', characterRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/combat', combatRoutes);
+app.use('/api/maps', mapRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -250,6 +250,47 @@ export const combatAPI = {
   },
 };
 
+// Maps API
+export const mapsAPI = {
+  getAll: async (campaignId?: string) => {
+    const params = campaignId ? `?campaignId=${campaignId}` : '';
+    return apiRequest(`/maps${params}`);
+  },
+
+  getById: async (id: string) => {
+    return apiRequest(`/maps/${id}`);
+  },
+
+  create: async (map: {
+    name: string;
+    description?: string;
+    campaignId?: string;
+    assetId?: string;
+    widthPx: number;
+    heightPx: number;
+    gridSize?: number;
+    gridType?: 'square' | 'hex';
+  }) => {
+    return apiRequest('/maps', {
+      method: 'POST',
+      body: JSON.stringify(map),
+    });
+  },
+
+  update: async (id: string, map: any) => {
+    return apiRequest(`/maps/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(map),
+    });
+  },
+
+  delete: async (id: string) => {
+    return apiRequest(`/maps/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 // Utility functions
 export const setAuthToken = (token: string) => {
   localStorage.setItem('authToken', token);

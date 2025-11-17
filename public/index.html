@@ -9,6 +9,8 @@
       name="description"
       content="D&D Map and Token Management Web Application"
     />
+    <!-- CSP for development - allows unsafe-eval for PixiJS -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: data: blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; img-src 'self' data: blob: http: https:; connect-src 'self' http: https: ws: wss:;" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>D&D Map App</title>

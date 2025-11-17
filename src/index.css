@@ -78,6 +78,33 @@ body {
 
 .mantine-Notifications-root {
   z-index: 3000 !important;
+  /* Position notifications to avoid navbar on desktop */
+  right: 20px !important;
+  left: auto !important; /* Ensure it stays on the right side */
+  top: 80px !important; /* Below header (60px) + 20px padding */
+}
+
+/* Adjust notification width to prevent overlap with navbar */
+.mantine-Notification-root {
+  max-width: 400px !important; /* Fixed width that's readable but won't overlap */
+  min-width: 320px !important; /* Minimum width for readability */
+  width: 400px !important; /* Set consistent width */
+}
+
+/* Ensure notification content wraps properly */
+.mantine-Notification-body {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.mantine-Notification-title {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.mantine-Notification-description {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
 }
 
 /* Improve readability */
@@ -128,6 +155,19 @@ body {
   .mantine-Container-root {
     padding-left: 8px;
     padding-right: 8px;
+  }
+  
+  /* Adjust notifications for mobile */
+  .mantine-Notifications-root {
+    right: 10px !important;
+    left: 10px !important;
+    top: 70px !important;
+  }
+  
+  .mantine-Notification-root {
+    max-width: calc(100vw - 20px) !important;
+    min-width: auto !important;
+    width: auto !important; /* Allow flexible width on mobile */
   }
 }
 
