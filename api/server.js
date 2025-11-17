@@ -11,6 +11,7 @@ const campaignRoutes = require('./routes/campaigns');
 const assetRoutes = require('./routes/assets');
 const combatRoutes = require('./routes/combat');
 const mapRoutes = require('./routes/maps');
+const databaseRoutes = require('./routes/database');
 const { testConnection } = require('./config/database');
 
 const app = express();
@@ -57,6 +58,7 @@ app.use('/api/campaigns', campaignRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/combat', combatRoutes);
 app.use('/api/maps', mapRoutes);
+app.use('/api/database', databaseRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

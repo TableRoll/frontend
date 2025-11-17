@@ -20,13 +20,16 @@ import {
   Select,
   Divider,
   Alert,
-  Loader
+  Loader,
+  Slider
 } from '@mantine/core';
 import {
   IconCheck,
   IconChevronRight,
   IconChevronLeft,
-  IconAlertCircle
+  IconAlertCircle,
+  IconZoomIn,
+  IconZoomOut
 } from '@tabler/icons-react';
 import {
   Character,
@@ -243,6 +246,9 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
   const [description, setDescription] = useState('');
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [avatar, setAvatar] = useState<string>('');
+  const [avatarScale, setAvatarScale] = useState(1);
+  const [avatarOffsetX, setAvatarOffsetX] = useState(0);
+  const [avatarOffsetY, setAvatarOffsetY] = useState(0);
 
   // Fetch races, classes, and backgrounds from API
   useEffect(() => {
@@ -382,6 +388,9 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
     setDescription('');
     setSelectedBackground(null);
     setAvatar('');
+    setAvatarScale(1);
+    setAvatarOffsetX(0);
+    setAvatarOffsetY(0);
     onClose();
   };
 
@@ -713,29 +722,94 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
                     )}
                     
                     {avatar && (
-                      <Card withBorder p="sm" mt="xs" style={{ backgroundColor: '#e7f5ff' }}>
-                        <Stack gap="xs">
-                          <Text size="xs" fw={500} c="blue">Token Preview</Text>
-                          <Center>
-                            <Box
-                              style={{
-                                width: 100,
-                                height: 100,
-                                borderRadius: '50%',
-                                border: '3px solid #228be6',
-                                backgroundImage: `url(${avatar})`,
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center',
-                                overflow: 'hidden',
-                                boxShadow: '0 4px 12px rgba(34, 139, 230, 0.3)'
-                              }}
-                            />
-                          </Center>
-                          <Text size="xs" c="blue" ta="center" fw={500}>
-                            ✓ This portrait will be your token on the map
-                          </Text>
-                        </Stack>
-                      </Card>
+                      <Stack gap="md" mt="sm">
+                        <Card withBorder p="sm" style={{ backgroundColor: '#e7f5ff' }}>
+                          <Stack gap="xs">
+                            <Text size="xs" fw={500} c="blue">Token Preview</Text>
+                            <Center>
+                              <canvas
+                                id="avatar-preview-canvas"
+                                width={120}
+                                height={120}
+                                style={{ backgroundColor: 'white', borderRadius: '8px' }}
+                              />
+                            </Center>
+                            <Text size="xs" c="blue" ta="center" fw={500}>
+                              Adjust zoom and position for your token
+                            </Text>
+                          </Stack>
+                        </Card>
+
+                        <Divider label="Image Adjustments" />
+
+                        <Box>
+                          <Group justify="space-between" mb="xs">
+                            <Text size="sm">Image Zoom</Text>
+                            <Group gap="xs">
+                              <IconZoomOut size={14} />
+                              <Text size="xs" c="dimmed">{(avatarScale * 100).toFixed(0)}%</Text>
+                              <IconZoomIn size={14} />
+                            </Group>
+                          </Group>
+                          <Slider
+                            value={avatarScale}
+                            onChange={setAvatarScale}
+                            min={0.5}
+                            max={3}
+                            step={0.1}
+                            marks={[
+                              { value: 0.5, label: '50%' },
+                              { value: 1, label: '100%' },
+                              { value: 2, label: '200%' },
+                              { value: 3, label: '300%' }
+                            ]}
+                          />
+                        </Box>
+
+                        <Box>
+                          <Text size="sm" mb="xs">Horizontal Position</Text>
+                          <Slider
+                            value={avatarOffsetX}
+                            onChange={setAvatarOffsetX}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            marks={[
+                              { value: -100, label: '←' },
+                              { value: 0, label: 'Center' },
+                              { value: 100, label: '→' }
+                            ]}
+                          />
+                        </Box>
+
+                        <Box>
+                          <Text size="sm" mb="xs">Vertical Position</Text>
+                          <Slider
+                            value={avatarOffsetY}
+                            onChange={setAvatarOffsetY}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            marks={[
+                              { value: -100, label: '↑' },
+                              { value: 0, label: 'Center' },
+                              { value: 100, label: '↓' }
+                            ]}
+                          />
+                        </Box>
+
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => {
+                            setAvatarScale(1);
+                            setAvatarOffsetX(0);
+                            setAvatarOffsetY(0);
+                          }}
+                        >
+                          Reset Image Position
+                        </Button>
+                      </Stack>
                     )}
                   </Box>
                 </Stack>
@@ -889,6 +963,44 @@ export const CharacterCreator: React.FC<CharacterCreatorProps> = ({ opened, onCl
           </Button>
         )}
       </Group>
+
+      {/* Draw avatar preview using canvas when avatar or adjustments change */}
+      {avatar && (
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){
+            var img = new Image();
+            var src = ${JSON.stringify(avatar)};
+            var scale = ${avatarScale};
+            var offX = ${avatarOffsetX};
+            var offY = ${avatarOffsetY};
+            var canvas = document.getElementById('avatar-preview-canvas');
+            if(!canvas) return;
+            var ctx = canvas.getContext('2d');
+            if(!ctx) return;
+            img.onload = function(){
+              var size = Math.min(canvas.width, canvas.height);
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+              var cx = canvas.width/2, cy = canvas.height/2;
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(cx, cy, size/2 - 4, 0, Math.PI*2);
+              ctx.clip();
+              var w = img.width * scale;
+              var h = img.height * scale;
+              var x = cx - w/2 + offX;
+              var y = cy - h/2 + offY;
+              ctx.drawImage(img, x, y, w, h);
+              ctx.restore();
+              ctx.beginPath();
+              ctx.arc(cx, cy, size/2 - 4, 0, Math.PI*2);
+              ctx.strokeStyle = '#228be6';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+            };
+            img.src = src;
+          })();
+        ` }} />
+      )}
     </Modal>
   );
 };

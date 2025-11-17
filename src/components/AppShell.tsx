@@ -20,14 +20,12 @@ import {
   IconSettings,
   IconLogout,
   IconUser,
-  IconSword,
-  IconDeviceGamepad2
+  IconSword
 } from '@tabler/icons-react';
 import { useAuthStore } from '../stores/authStore';
 import { useMapStore } from '../stores/mapStoreWithAPI';
 import { Dashboard } from './Dashboard';
 import { MapCanvas } from './MapCanvas';
-import { GameCanvas } from './GameCanvas';
 import { CharactersView } from './CharactersView';
 import { AssetPanel } from './AssetPanel';
 import { CombatManager } from './CombatManager';
@@ -103,8 +101,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           onAssetUpload={() => {}}
           onAssetDelete={deleteAsset}
         />;
-      case 'game':
-        return <GameCanvas />;
       default:
         return <Dashboard />;
     }
@@ -113,7 +109,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: IconHome },
     { id: 'map', label: 'Map', icon: IconMap },
-    { id: 'game', label: 'Game', icon: IconDeviceGamepad2 },
     { id: 'characters', label: 'Characters', icon: IconUsers },
     { id: 'assets', label: 'Assets', icon: IconPhoto },
   ];

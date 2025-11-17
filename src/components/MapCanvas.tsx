@@ -46,7 +46,23 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
   const pendingViewportRef = useRef<typeof viewport | null>(null);
   const lastMouseMoveTime = useRef<number>(0);
 
-  const { resetViewport, updateViewport, isGM, assets, currentCampaign } = useMapStore();
+  const { resetViewport, updateViewport, isGM, assets, currentCampaign, loadAssets } = useMapStore();
+
+  // Load assets when campaign changes or component mounts
+  useEffect(() => {
+    if (currentCampaign?.id) {
+      console.log('🔄 Loading assets for campaign:', currentCampaign.id);
+      loadAssets(currentCampaign.id).catch(err => {
+        console.error('Failed to load assets:', err);
+      });
+    } else {
+      // Load all assets if no campaign is selected
+      console.log('🔄 Loading all assets (no campaign selected)');
+      loadAssets().catch(err => {
+        console.error('Failed to load assets:', err);
+      });
+    }
+  }, [currentCampaign?.id, loadAssets]);
 
   // Initialize PixiJS application
   useEffect(() => {
@@ -900,35 +916,25 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
                   finalY = Math.max(0, Math.min(finalY, map.heightPx));
                 }
                 
-                // Create token directly from asset data
                 const { addToken } = useMapStore.getState();
-                const tokenId = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                
-                // Use token data if this is a token asset, otherwise use defaults
                 const tokenAssetData = asset.tokenData;
-                const newToken = {
-                  id: tokenId,
+                addToken({
                   name: asset.name,
                   x: finalX,
                   y: finalY,
                   rotation: tokenAssetData?.rotation || 0,
                   size: tokenAssetData?.size || 1,
                   sprite: asset.url,
-                  hp: tokenAssetData?.hp || {
-                    current: 100,
-                    max: 100,
-                    temporary: 0
-                  },
+                  hp: tokenAssetData?.hp || { current: 100, max: 100, temporary: 0 },
                   states: tokenAssetData?.states || [],
                   ownerId: tokenAssetData?.ownerId || 'gm_1',
                   layerId: 'tokens',
                   locked: tokenAssetData?.locked || false,
                   visible: tokenAssetData?.visible !== false,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-                };
-                
-                addToken(newToken);
+                  imageScale: 1,
+                  imageOffsetX: 0,
+                  imageOffsetY: 0
+                });
                 handleAssetDrop(asset, { x: finalX, y: finalY });
               }
             }

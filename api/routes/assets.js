@@ -50,14 +50,14 @@ router.get('/', authenticateToken, async (req, res) => {
       SELECT a.*, c.name as campaign_name
       FROM assets a
       LEFT JOIN campaigns c ON a.campaign_id = c.id
-      WHERE a.owner_id = $1
+      WHERE (a.owner_id = $1 OR a.is_public = true)
     `;
     
     const params = [req.user.userId];
     let paramCount = 2;
     
     if (campaignId) {
-      queryText += ` AND a.campaign_id = $${paramCount}`;
+      queryText += ` AND (a.campaign_id = $${paramCount} OR a.campaign_id IS NULL)`;
       params.push(campaignId);
       paramCount++;
     }

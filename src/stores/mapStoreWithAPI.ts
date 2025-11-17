@@ -64,6 +64,33 @@ const transformMapFromAPI = (m: any): Map => {
   };
 };
 
+// Helper function to transform API asset response to frontend Asset interface
+const transformAssetFromAPI = (a: any): Asset => {
+  // Build URLs from asset ID - use getFileUrl for proper file serving
+  const url = a.id ? assetsAPI.getFileUrl(a.id) : (a.filePath || '');
+  const thumbnail = a.thumbnailPath || url; // Use thumbnail if available, otherwise use main URL
+  
+  console.log('🔄 Transforming asset from API:', {
+    id: a.id,
+    name: a.name,
+    assetType: a.assetType,
+    hasUrl: !!url,
+    hasThumbnail: !!thumbnail,
+    url: url ? url.substring(0, 100) + '...' : 'NO URL'
+  });
+  
+  return {
+    id: a.id,
+    name: a.name,
+    type: a.assetType || a.type || 'image', // API uses assetType, fallback to type
+    url: url,
+    thumbnail: thumbnail,
+    size: a.fileSize || a.size || 0,
+    uploadedAt: a.createdAt ? new Date(a.createdAt) : (a.uploadedAt ? new Date(a.uploadedAt) : new Date()),
+    tokenData: a.tokenData // Preserve token data if present
+  };
+};
+
 interface MapStore extends AppState {
   // Maps
   maps: Map[];
@@ -129,7 +156,7 @@ interface MapStore extends AppState {
   consumeAction: (tokenId: string) => void;
   consumeBonusAction: (tokenId: string) => void;
   
-  // Actions - Tokens
+  // Actions - Tokens (persisted on current campaign)
   addToken: (token: Omit<Token, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateToken: (id: string, updates: Partial<Token>) => void;
   deleteToken: (id: string) => void;
@@ -572,7 +599,13 @@ export const useMapStore = create<MapStore>()(
         try {
           set({ isLoading: true, error: null });
           const response = await assetsAPI.upload(file, data);
-          const newAsset = response.asset;
+          const newAsset = transformAssetFromAPI(response.asset);
+          console.log('✅ Uploaded and transformed asset:', {
+            id: newAsset.id,
+            name: newAsset.name,
+            type: newAsset.type,
+            hasUrl: !!newAsset.url
+          });
           set((state) => ({
             assets: [...state.assets, newAsset]
           }));
@@ -642,30 +675,77 @@ export const useMapStore = create<MapStore>()(
         }
       })),
       
-      // Actions - Tokens
-      addToken: (token) => set((state) => ({
-        // This would need to be implemented based on your token storage strategy
-        // For now, we'll just add to local state
-      })),
+      // Actions - Tokens (persisted on current campaign)
+      addToken: (token) => set((state) => {
+        if (!state.currentCampaign) return state;
+        const newToken: Token = {
+          id: `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: token.name || 'Token',
+          x: token.x ?? 0,
+          y: token.y ?? 0,
+          size: token.size ?? 1,
+          rotation: token.rotation ?? 0,
+          sprite: token.sprite || '',
+          hp: token.hp || { current: 10, max: 10, temporary: 0 },
+          states: token.states || [],
+          ownerId: token.ownerId || 'gm',
+          layerId: token.layerId || 'tokens',
+          locked: !!token.locked,
+          visible: token.visible !== false,
+          imageScale: token.imageScale ?? 1,
+          imageOffsetX: token.imageOffsetX ?? 0,
+          imageOffsetY: token.imageOffsetY ?? 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as Token;
+
+        const updatedCampaign: Campaign = {
+          ...state.currentCampaign,
+          tokens: [...(state.currentCampaign.tokens || []), newToken],
+          updatedAt: new Date()
+        } as Campaign;
+
+        return {
+          campaigns: state.campaigns.map(c => c.id === updatedCampaign.id ? updatedCampaign : c),
+          currentCampaign: updatedCampaign
+        };
+      }),
+
+      updateToken: (id, updates) => set((state) => {
+        if (!state.currentCampaign) return state;
+        const tokens = state.currentCampaign.tokens || [];
+        const updatedTokens = tokens.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date() } as Token : t);
+        const updatedCampaign: Campaign = { ...state.currentCampaign, tokens: updatedTokens, updatedAt: new Date() } as Campaign;
+        return {
+          campaigns: state.campaigns.map(c => c.id === updatedCampaign.id ? updatedCampaign : c),
+          currentCampaign: updatedCampaign
+        };
+      }),
+
+      deleteToken: (id) => set((state) => {
+        if (!state.currentCampaign) return state;
+        const tokens = state.currentCampaign.tokens || [];
+        const updatedTokens = tokens.filter(t => t.id !== id);
+        const updatedCampaign: Campaign = { ...state.currentCampaign, tokens: updatedTokens, updatedAt: new Date() } as Campaign;
+        return {
+          campaigns: state.campaigns.map(c => c.id === updatedCampaign.id ? updatedCampaign : c),
+          currentCampaign: updatedCampaign
+        };
+      }),
+
+      moveToken: (event) => set((state) => {
+        if (!state.currentCampaign) return state;
+        const tokens = state.currentCampaign.tokens || [];
+        const updatedTokens = tokens.map(t => t.id === event.tokenId ? { ...t, x: event.newX, y: event.newY, updatedAt: new Date() } as Token : t);
+        const updatedCampaign: Campaign = { ...state.currentCampaign, tokens: updatedTokens, updatedAt: new Date() } as Campaign;
+        return {
+          campaigns: state.campaigns.map(c => c.id === updatedCampaign.id ? updatedCampaign : c),
+          currentCampaign: updatedCampaign,
+          selectedTokens: { tokenIds: [event.tokenId] }
+        };
+      }),
       
-      updateToken: (id, updates) => set((state) => ({
-        // This would need to be implemented based on your token storage strategy
-      })),
-      
-      deleteToken: (id) => set((state) => ({
-        // This would need to be implemented based on your token storage strategy
-      })),
-      
-      moveToken: (event) => set((state) => ({
-        // This would need to be implemented based on your token storage strategy
-        // For now, we'll just update the selected tokens
-        selectedTokens: {
-          ...state.selectedTokens,
-          tokenIds: [event.tokenId]
-        }
-      })),
-      
-      selectTokens: (event) => set((state) => ({
+      selectTokens: (event) => set(() => ({
         selectedTokens: {
           tokenIds: event.tokenIds || []
         }
@@ -737,8 +817,28 @@ export const useMapStore = create<MapStore>()(
         try {
           set({ isLoading: true, error: null });
           const response = await assetsAPI.getAll(campaignId);
-          set({ assets: response.assets });
+          console.log('📥 Loaded assets from API:', {
+            count: response.assets?.length || 0,
+            assets: response.assets?.map((a: any) => ({
+              id: a.id,
+              name: a.name,
+              assetType: a.assetType,
+              filePath: a.filePath,
+              hasThumbnail: !!a.thumbnailPath
+            }))
+          });
+          // Transform API response to match frontend Asset interface
+          const transformedAssets = (response.assets || []).map(transformAssetFromAPI);
+          console.log('✅ Transformed assets:', transformedAssets.map((a: Asset) => ({
+            id: a.id,
+            name: a.name,
+            type: a.type,
+            hasUrl: !!a.url,
+            hasThumbnail: !!a.thumbnail
+          })));
+          set({ assets: transformedAssets });
         } catch (error) {
+          console.error('❌ Failed to load assets:', error);
           set({ error: error instanceof Error ? error.message : 'Failed to load assets' });
         } finally {
           set({ isLoading: false });

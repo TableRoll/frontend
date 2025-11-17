@@ -34,7 +34,7 @@ import {
   IconFile,
   IconMap
 } from '@tabler/icons-react';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 import { Asset, AssetType } from '../types/models';
 import { assetsAPI } from '../services/api';
 
@@ -51,7 +51,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
   onAssetUpload,
   onAssetDelete
 }) => {
-  const { addAsset, currentCampaign } = useMapStore();
+  const { uploadAsset, currentCampaign } = useMapStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<AssetType | 'all'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -93,18 +93,13 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
           assetType = 'map';
         }
         
-        // Upload to API
-        const response = await assetsAPI.upload(file, {
+        // Upload to API via store (keeps state in sync)
+        await uploadAsset(file, {
           name: file.name,
           assetType,
           campaignId: currentCampaign?.id,
           isPublic: false
         });
-        
-        const newAsset = response.asset;
-        
-        // Add to local store
-        addAsset(newAsset);
         onAssetUpload([file]);
         
       } catch (error) {
@@ -119,7 +114,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
     }
     
     setUploadingFiles([]);
-  }, [addAsset, onAssetUpload, currentCampaign]);
+  }, [uploadAsset, onAssetUpload, currentCampaign]);
 
   // Thumbnails are now handled by the API
 

@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconDragDrop, IconPlus } from '@tabler/icons-react';
 import { Asset } from '../types/models';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 
 interface AssetHotbarProps {
   assets: Asset[];
@@ -74,34 +74,25 @@ export const AssetHotbar: React.FC<AssetHotbarProps> = ({
       const x = e.clientX - canvasRect.left;
       const y = e.clientY - canvasRect.top;
 
-      // Create a token from the asset
-      const tokenId = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
       // Use token data if this is a token asset, otherwise use defaults
       const tokenAssetData = draggedAsset.tokenData;
-      const newToken = {
-        id: tokenId,
+      addToken({
         name: draggedAsset.name,
-        x: x,
-        y: y,
+        x,
+        y,
         rotation: tokenAssetData?.rotation || 0,
         size: tokenAssetData?.size || 1,
         sprite: draggedAsset.url,
-        hp: tokenAssetData?.hp || {
-          current: 100,
-          max: 100,
-          temporary: 0
-        },
+        hp: tokenAssetData?.hp || { current: 100, max: 100, temporary: 0 },
         states: tokenAssetData?.states || [],
         ownerId: tokenAssetData?.ownerId || 'gm_1',
         layerId: 'tokens',
         locked: tokenAssetData?.locked || false,
         visible: tokenAssetData?.visible !== false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      addToken(newToken);
+        imageScale: 1,
+        imageOffsetX: 0,
+        imageOffsetY: 0
+      });
       onAssetDrop(draggedAsset, { x, y });
     } catch (error) {
       console.error('Error creating token from asset:', error);
