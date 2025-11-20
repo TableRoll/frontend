@@ -68,7 +68,32 @@ const transformMapFromAPI = (m: any): Map => {
 const transformAssetFromAPI = (a: any): Asset => {
   // Build URLs from asset ID - use getFileUrl for proper file serving
   const url = a.id ? assetsAPI.getFileUrl(a.id) : (a.filePath || '');
-  const thumbnail = a.thumbnailPath || url; // Use thumbnail if available, otherwise use main URL
+  
+  // Handle thumbnail URL - ensure it's a full URL
+  let thumbnail = url; // Default to main URL
+  if (a.thumbnailPath || a.thumbnailId) {
+    // If thumbnailId exists, use getFileUrl to construct the URL
+    if (a.thumbnailId) {
+      thumbnail = assetsAPI.getFileUrl(a.thumbnailId);
+    }
+    // If thumbnailPath is a full URL, use it as-is
+    else if (a.thumbnailPath && (a.thumbnailPath.startsWith('http://') || a.thumbnailPath.startsWith('https://'))) {
+      thumbnail = a.thumbnailPath;
+    }
+    // If thumbnailPath is a relative path, convert it to full URL
+    else if (a.thumbnailPath && a.thumbnailPath.startsWith('/')) {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+      thumbnail = `${API_BASE_URL}${a.thumbnailPath}`;
+    }
+    // If thumbnailPath looks like an ID (UUID format), use getFileUrl
+    else if (a.thumbnailPath && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a.thumbnailPath)) {
+      thumbnail = assetsAPI.getFileUrl(a.thumbnailPath);
+    }
+    // Otherwise, try to use thumbnailPath as-is (might be a data URL or full path)
+    else if (a.thumbnailPath) {
+      thumbnail = a.thumbnailPath;
+    }
+  }
   
   console.log('🔄 Transforming asset from API:', {
     id: a.id,
@@ -76,7 +101,8 @@ const transformAssetFromAPI = (a: any): Asset => {
     assetType: a.assetType,
     hasUrl: !!url,
     hasThumbnail: !!thumbnail,
-    url: url ? url.substring(0, 100) + '...' : 'NO URL'
+    url: url ? url.substring(0, 100) + '...' : 'NO URL',
+    thumbnail: thumbnail ? thumbnail.substring(0, 100) + '...' : 'NO THUMBNAIL'
   });
   
   return {

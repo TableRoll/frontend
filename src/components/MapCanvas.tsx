@@ -501,61 +501,116 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
     };
   }, [map, updateViewport, isPixiReady]);
 
-  // Draw grid
+  // Draw grid - make it visible on the background image
+  // Wait for PixiJS to be ready and map to be loaded before drawing grid
   useEffect(() => {
-    if (!pixiAppRef.current || !mapContainerRef.current || !isGridVisible || !map) return;
+    if (!pixiAppRef.current || !mapContainerRef.current || !map || !isPixiReady) {
+      console.log('⏳ Grid rendering skipped:', {
+        hasPixiApp: !!pixiAppRef.current,
+        hasMapContainer: !!mapContainerRef.current,
+        hasMap: !!map,
+        isPixiReady,
+        isGridVisible
+      });
+      return;
+    }
 
-    const graphics = new PIXI.Graphics();
-    
-    // Remove old grid
+    // Remove old grid first
     if (gridGraphicsRef.current && mapContainerRef.current) {
       try {
-        mapContainerRef.current.removeChild(gridGraphicsRef.current as any);
+        if (mapContainerRef.current.children.includes(gridGraphicsRef.current as any)) {
+          mapContainerRef.current.removeChild(gridGraphicsRef.current as any);
+        }
         gridGraphicsRef.current.destroy();
+        gridGraphicsRef.current = null;
       } catch (err) {
         console.error('Error removing old grid:', err);
       }
     }
 
-    // Draw grid - ensure it's transparent and doesn't cover background
-    graphics.clear(); // Clear any previous drawing
-    graphics.lineStyle(1, 0x666666, 0.5); // Semi-transparent lines
-    // Don't fill - only draw lines
-    
-    if (gridType === 'square') {
-      // Draw square grid
-      for (let x = 0; x <= map.widthPx; x += gridSize) {
-        graphics.moveTo(x, 0);
-        graphics.lineTo(x, map.heightPx);
-      }
+    // Only draw grid if it's visible
+    if (!isGridVisible) {
+      console.log('⏸️ Grid not visible, skipping render');
+      return;
+    }
+
+    // Wait a bit to ensure background is loaded before drawing grid
+    const drawGrid = () => {
+      if (!mapContainerRef.current || !map) return;
+
+      const graphics = new PIXI.Graphics();
       
-      for (let y = 0; y <= map.heightPx; y += gridSize) {
-        graphics.moveTo(0, y);
-        graphics.lineTo(map.widthPx, y);
-      }
-    } else if (gridType === 'hex') {
-      // Draw hex grid (simplified)
-      const hexWidth = gridSize * 2;
-      const hexHeight = gridSize * Math.sqrt(3);
+      // Draw grid with very visible lines - use bright color with high contrast
+      graphics.clear();
+      // Use bright white lines with full opacity and a subtle shadow for visibility
+      graphics.lineStyle(3, 0xffffff, 1.0); // Thick, fully opaque white lines
       
-      for (let y = 0; y < map.heightPx; y += hexHeight * 0.75) {
-        for (let x = 0; x < map.widthPx; x += hexWidth) {
-          const offsetX = (y / (hexHeight * 0.75)) % 2 === 0 ? 0 : hexWidth / 2;
-          drawHex(graphics, x + offsetX, y, gridSize);
+      if (gridType === 'square') {
+        // Draw square grid
+        for (let x = 0; x <= map.widthPx; x += gridSize) {
+          graphics.moveTo(x, 0);
+          graphics.lineTo(x, map.heightPx);
+        }
+        
+        for (let y = 0; y <= map.heightPx; y += gridSize) {
+          graphics.moveTo(0, y);
+          graphics.lineTo(map.widthPx, y);
+        }
+      } else if (gridType === 'hex') {
+        // Draw hex grid (simplified)
+        const hexWidth = gridSize * 2;
+        const hexHeight = gridSize * Math.sqrt(3);
+        
+        for (let y = 0; y < map.heightPx; y += hexHeight * 0.75) {
+          for (let x = 0; x < map.widthPx; x += hexWidth) {
+            const offsetX = (y / (hexHeight * 0.75)) % 2 === 0 ? 0 : hexWidth / 2;
+            drawHex(graphics, x + offsetX, y, gridSize);
+          }
         }
       }
-    }
-    
-    if (mapContainerRef.current) {
-      mapContainerRef.current.addChild(graphics as any);
-      gridGraphicsRef.current = graphics;
-    }
+      
+      // Ensure grid is visible and on top
+      graphics.visible = true;
+      graphics.alpha = 1.0;
+      
+      // Add grid to map container - always add at the end to ensure it's on top
+      if (mapContainerRef.current) {
+        // Remove grid if it exists and add it at the end (top of z-order)
+        if (gridGraphicsRef.current && mapContainerRef.current.children.includes(gridGraphicsRef.current as any)) {
+          mapContainerRef.current.removeChild(gridGraphicsRef.current as any);
+        }
+        mapContainerRef.current.addChild(graphics as any); // Add at end = top of z-order
+        gridGraphicsRef.current = graphics;
+        
+        const childIndex = mapContainerRef.current.children.indexOf(graphics as any);
+        console.log('✅ Grid rendered and added to map container:', {
+          gridVisible: graphics.visible,
+          gridAlpha: graphics.alpha,
+          childIndex,
+          lineColor: '0xffffff',
+          lineWidth: 3,
+          lineAlpha: 1.0,
+          totalChildren: mapContainerRef.current.children.length,
+          mapWidth: map.widthPx,
+          mapHeight: map.heightPx,
+          gridSize,
+          gridType,
+          isGridVisible
+        });
+      }
+    };
+
+    // Small delay to ensure background is rendered first
+    const timeoutId = setTimeout(drawGrid, 100);
     
     // Cleanup function for grid
     return () => {
+      clearTimeout(timeoutId);
       if (gridGraphicsRef.current && mapContainerRef.current) {
         try {
-          mapContainerRef.current.removeChild(gridGraphicsRef.current as any);
+          if (mapContainerRef.current.children.includes(gridGraphicsRef.current as any)) {
+            mapContainerRef.current.removeChild(gridGraphicsRef.current as any);
+          }
           gridGraphicsRef.current.destroy();
           gridGraphicsRef.current = null;
         } catch (err) {
@@ -563,7 +618,7 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
         }
       }
     };
-  }, [isGridVisible, gridType, gridSize, map]);
+  }, [isGridVisible, gridType, gridSize, map, isPixiReady]);
 
   // Helper function to draw a hex
   const drawHex = (graphics: PIXI.Graphics, x: number, y: number, size: number) => {

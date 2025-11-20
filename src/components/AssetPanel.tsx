@@ -15,7 +15,6 @@ import {
   Select,
   ActionIcon,
   Menu,
-  Image,
   Box,
   Progress,
   Center
@@ -58,6 +57,7 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
   const [uploadModalOpened, setUploadModalOpened] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
   // Filter assets based on search and type
   // Exclude map-type assets as they're managed in the Maps section
@@ -234,19 +234,33 @@ export const AssetPanel: React.FC<AssetPanelProps> = ({
                 <Card withBorder shadow="sm" h="100%">
                   <Stack gap="sm" h="100%">
                     {/* Asset Preview */}
-                    <Box style={{ height: viewMode === 'grid' ? 150 : 80, overflow: 'hidden' }}>
-                      {asset.thumbnail ? (
-                        <Image
-                          src={asset.thumbnail}
-                          alt={asset.name}
-                          fit="cover"
-                          h="100%"
-                          w="100%"
-                        />
-                      ) : (
+                    <Box style={{ height: viewMode === 'grid' ? 150 : 80, overflow: 'hidden', position: 'relative' }}>
+                      {imageErrors.has(asset.id) || (!asset.thumbnail && !asset.url) ? (
                         <Center h="100%" bg="gray.1">
                           {getAssetIcon(asset.type)}
                         </Center>
+                      ) : (
+                        <img
+                          src={asset.thumbnail || asset.url}
+                          alt={asset.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                          crossOrigin="anonymous"
+                          onError={() => {
+                            setImageErrors(prev => new Set(prev).add(asset.id));
+                            console.error('Failed to load image for asset:', asset.id, asset.name, {
+                              thumbnail: asset.thumbnail,
+                              url: asset.url
+                            });
+                          }}
+                          onLoad={() => {
+                            console.log('✅ Asset image loaded successfully:', asset.id, asset.name);
+                          }}
+                        />
                       )}
                     </Box>
 
