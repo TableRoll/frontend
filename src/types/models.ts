@@ -444,3 +444,24 @@ export interface AuthError {
   code?: string;
   field?: string;
 }
+
+// Chat message types
+export type ChatMessageType = 'user' | 'system' | 'dice_roll' | 'action';
+
+export interface ChatMessage {
+  id: string;
+  campaignId: string;
+  senderId: string | null; // null for system messages
+  message: string;
+  messageType: ChatMessageType;
+  metadata?: Record<string, any>; // Additional data like dice results, action details, etc.
+  createdAt: Date;
+  updatedAt: Date;
+  // Joined user data (when loaded from API)
+  sender?: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatar?: string;
+  };
+}

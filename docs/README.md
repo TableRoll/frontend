@@ -42,6 +42,12 @@ Welcome to the D&D Campaign Management System documentation! This folder contain
 
 - **[DATABASE_MIGRATION_GUIDE.md](./DATABASE_MIGRATION_GUIDE.md)** - Database migration guide
 - **[DATABASE_INTEGRATION_ISSUE.md](./DATABASE_INTEGRATION_ISSUE.md)** - Database integration troubleshooting
+- **[DATABASE_ENTITY_DIAGRAM_HU.puml](./DATABASE_ENTITY_DIAGRAM_HU.puml)** - Database entity diagram (Hungarian, PlantUML)
+- **[DATABASE_ENTITY_DIAGRAM_HU_README.md](./DATABASE_ENTITY_DIAGRAM_HU_README.md)** - Entity diagram usage guide (Hungarian)
+
+## 🏗️ Architecture
+
+- **[ARCHITECTURE_HU.md](./ARCHITECTURE_HU.md)** - System architecture overview (Hungarian)
 
 ## 🐳 Docker & Deployment
 
@@ -87,7 +93,7 @@ Welcome to the D&D Campaign Management System documentation! This folder contain
 ---
 
 **Last Updated:** November 1, 2025  
-**Total Documents:** 29
+**Total Documents:** 30
 
 For questions or issues, please refer to the specific guide or check the main README.md file.
 
