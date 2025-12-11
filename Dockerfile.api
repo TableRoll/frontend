@@ -5,10 +5,12 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package files
-COPY api/package*.json ./
+COPY api/package.json ./
+COPY api/package-lock.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+# Use --omit=dev (newer npm syntax, replaces --only=production)
+RUN npm ci --omit=dev || npm install --omit=dev
 
 # Copy API source code
 COPY api/ ./

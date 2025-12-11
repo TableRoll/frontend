@@ -6,6 +6,27 @@ A comprehensive web application for managing D&D campaigns, maps, tokens, charac
 
 This application is fully containerized and can be run with Docker for easy deployment and development.
 
+### Pre-Deployment Preparation
+
+Before deploying, generate secure passwords and secrets:
+
+```bash
+# Linux/Mac
+./prepare-deployment.sh
+
+# Windows
+prepare-deployment.bat
+```
+
+This will generate:
+- Database password
+- JWT secret
+- Grafana admin password
+- Create `docker.env` template
+- Save secrets to `deployment-secrets.txt`
+
+**Important**: Review the generated secrets and update your configuration files before deployment!
+
 ### Quick Start with Docker
 
 ```bash
