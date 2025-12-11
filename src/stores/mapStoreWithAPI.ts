@@ -82,7 +82,7 @@ const transformAssetFromAPI = (a: any): Asset => {
     }
     // If thumbnailPath is a relative path, convert it to full URL
     else if (a.thumbnailPath && a.thumbnailPath.startsWith('/')) {
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+      const API_BASE_URL = process.env.REACT_APP_API_URL;
       thumbnail = `${API_BASE_URL}${a.thumbnailPath}`;
     }
     // If thumbnailPath looks like an ID (UUID format), use getFileUrl
