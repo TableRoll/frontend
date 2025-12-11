@@ -9,9 +9,7 @@ import {
   Group,
   Text,
   Switch,
-  ColorInput,
   FileInput,
-  Image,
   Box,
   Divider,
   Alert,
@@ -20,9 +18,9 @@ import {
   Paper,
   Center
 } from '@mantine/core';
-import { IconPlus, IconUpload, IconAlertCircle, IconZoomIn, IconZoomOut } from '@tabler/icons-react';
-import { useMapStore } from '../stores/mapStore';
-import { createNewToken, createTokenFromAsset } from '../utils/tokenUtils';
+import { IconPlus, IconAlertCircle, IconZoomIn, IconZoomOut } from '@tabler/icons-react';
+import { useMapStore } from '../stores/mapStoreWithAPI';
+import { createNewToken } from '../utils/tokenUtils';
 import { Token, Asset } from '../types/models';
 
 interface TokenPreviewProps {
@@ -147,7 +145,7 @@ export const TokenCreator: React.FC<TokenCreatorProps> = ({
   initialPosition = { x: 0, y: 0 },
   fromAsset
 }) => {
-  const { addToken, currentPlayer, players } = useMapStore();
+  const { addToken, currentPlayer, players, uploadAsset, currentCampaign } = useMapStore();
   
   const [tokenData, setTokenData] = useState<Partial<Token>>({
     name: fromAsset?.name || 'New Token',
@@ -176,14 +174,25 @@ export const TokenCreator: React.FC<TokenCreatorProps> = ({
   const [imageOffsetY, setImageOffsetY] = useState(0);
 
   // Handle file upload for token sprite
-  const handleSpriteUpload = (file: File | null) => {
+  const handleSpriteUpload = async (file: File | null) => {
     if (file) {
-      setSpriteFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setSpritePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        setSpriteFile(file);
+        // Upload file to assets via store to persist and get URL
+        await uploadAsset(file, {
+          name: file.name,
+          assetType: 'token',
+          campaignId: currentCampaign?.id,
+          isPublic: false
+        });
+        // After upload, the store will have the new asset at the end
+        const latestAsset = useMapStore.getState().assets.slice(-1)[0];
+        if (latestAsset?.url) {
+          setSpritePreview(latestAsset.url);
+        }
+      } catch (e) {
+        console.error('Failed to upload token image asset', e);
+      }
     }
   };
 
@@ -325,18 +334,15 @@ export const TokenCreator: React.FC<TokenCreatorProps> = ({
             </Stack>
           </Grid.Col>
 
-          {/* Right Column - Image & Preview */}
+          {/* Right Column - Image Upload */}
           <Grid.Col span={6}>
             <Stack gap="md">
-              {/* Token Image */}
               <Text size="sm" fw={500}>Token Image</Text>
-              
               {fromAsset && (
                 <Alert icon={<IconAlertCircle size={16} />} color="blue">
                   <Text size="xs">Creating from: {fromAsset.name}</Text>
                 </Alert>
               )}
-
               <FileInput
                 label="Upload Image"
                 placeholder="Choose an image"
@@ -345,99 +351,6 @@ export const TokenCreator: React.FC<TokenCreatorProps> = ({
                 onChange={handleSpriteUpload}
                 size="sm"
               />
-
-              {/* Live Preview */}
-              {spritePreview && (
-                <>
-                  <Paper withBorder p="md" style={{ backgroundColor: '#2c2c2c' }}>
-                    <Text size="sm" fw={500} c="white" mb="md" ta="center">
-                      Token Preview
-                    </Text>
-                    <TokenPreview
-                      imageUrl={spritePreview}
-                      size={tokenData.size || 1}
-                      rotation={tokenData.rotation || 0}
-                      imageScale={imageScale}
-                      imageOffsetX={imageOffsetX}
-                      imageOffsetY={imageOffsetY}
-                      hp={tokenData.hp || { current: 10, max: 10 }}
-                    />
-                  </Paper>
-
-                  <Divider label="Image Adjustments" />
-
-                  {/* Image Scale Control */}
-                  <Box>
-                    <Group justify="space-between" mb="xs">
-                      <Text size="sm">Image Zoom</Text>
-                      <Group gap="xs">
-                        <IconZoomOut size={14} />
-                        <Text size="xs" c="dimmed">{(imageScale * 100).toFixed(0)}%</Text>
-                        <IconZoomIn size={14} />
-                      </Group>
-                    </Group>
-                    <Slider
-                      value={imageScale}
-                      onChange={setImageScale}
-                      min={0.5}
-                      max={3}
-                      step={0.1}
-                      marks={[
-                        { value: 0.5, label: '50%' },
-                        { value: 1, label: '100%' },
-                        { value: 2, label: '200%' },
-                        { value: 3, label: '300%' }
-                      ]}
-                    />
-                  </Box>
-
-                  {/* Image Position Controls */}
-                  <Box>
-                    <Text size="sm" mb="xs">Horizontal Position</Text>
-                    <Slider
-                      value={imageOffsetX}
-                      onChange={setImageOffsetX}
-                      min={-100}
-                      max={100}
-                      step={1}
-                      marks={[
-                        { value: -100, label: '←' },
-                        { value: 0, label: 'Center' },
-                        { value: 100, label: '→' }
-                      ]}
-                    />
-                  </Box>
-
-                  <Box>
-                    <Text size="sm" mb="xs">Vertical Position</Text>
-                    <Slider
-                      value={imageOffsetY}
-                      onChange={setImageOffsetY}
-                      min={-100}
-                      max={100}
-                      step={1}
-                      marks={[
-                        { value: -100, label: '↑' },
-                        { value: 0, label: 'Center' },
-                        { value: 100, label: '↓' }
-                      ]}
-                    />
-                  </Box>
-
-                  <Button
-                    size="xs"
-                    variant="light"
-                    fullWidth
-                    onClick={() => {
-                      setImageScale(1);
-                      setImageOffsetX(0);
-                      setImageOffsetY(0);
-                    }}
-                  >
-                    Reset Image Position
-                  </Button>
-                </>
-              )}
             </Stack>
           </Grid.Col>
         </Grid>
@@ -455,6 +368,97 @@ export const TokenCreator: React.FC<TokenCreatorProps> = ({
             Create Token
           </Button>
         </Group>
+
+        {/* Image Preview & Adjustments moved to end */}
+        {spritePreview && (
+          <Stack gap="md" mt="md">
+            <Paper withBorder p="md" style={{ backgroundColor: '#2c2c2c' }}>
+              <Text size="sm" fw={500} c="white" mb="md" ta="center">
+                Token Preview
+              </Text>
+              <TokenPreview
+                imageUrl={spritePreview}
+                size={tokenData.size || 1}
+                rotation={tokenData.rotation || 0}
+                imageScale={imageScale}
+                imageOffsetX={imageOffsetX}
+                imageOffsetY={imageOffsetY}
+                hp={tokenData.hp || { current: 10, max: 10 }}
+              />
+            </Paper>
+
+            <Divider label="Image Adjustments" />
+
+            <Box>
+              <Group justify="space-between" mb="xs">
+                <Text size="sm">Image Zoom</Text>
+                <Group gap="xs">
+                  <IconZoomOut size={14} />
+                  <Text size="xs" c="dimmed">{(imageScale * 100).toFixed(0)}%</Text>
+                  <IconZoomIn size={14} />
+                </Group>
+              </Group>
+              <Slider
+                value={imageScale}
+                onChange={setImageScale}
+                min={0.5}
+                max={3}
+                step={0.1}
+                marks={[
+                  { value: 0.5, label: '50%' },
+                  { value: 1, label: '100%' },
+                  { value: 2, label: '200%' },
+                  { value: 3, label: '300%' }
+                ]}
+              />
+            </Box>
+
+            <Box>
+              <Text size="sm" mb="xs">Horizontal Position</Text>
+              <Slider
+                value={imageOffsetX}
+                onChange={setImageOffsetX}
+                min={-100}
+                max={100}
+                step={1}
+                marks={[
+                  { value: -100, label: '←' },
+                  { value: 0, label: 'Center' },
+                  { value: 100, label: '→' }
+                ]}
+              />
+            </Box>
+
+            <Box>
+              <Text size="sm" mb="xs">Vertical Position</Text>
+              <Slider
+                value={imageOffsetY}
+                onChange={setImageOffsetY}
+                min={-100}
+                max={100}
+                step={1}
+                marks={[
+                  { value: -100, label: '↑' },
+                  { value: 0, label: 'Center' },
+                  { value: 100, label: '↓' }
+                ]}
+              />
+            </Box>
+
+            <Button
+              size="xs"
+              variant="light"
+              fullWidth
+              onClick={() => {
+                setImageScale(1);
+                setImageOffsetX(0);
+                setImageOffsetY(0);
+              }}
+            >
+              Reset Image Position
+            </Button>
+          </Stack>
+        )}
       </Stack>
     </Modal>
   );

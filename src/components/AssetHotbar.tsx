@@ -3,17 +3,17 @@ import {
   Box,
   ScrollArea,
   Group,
-  Image,
   Text,
   Tooltip,
   Badge,
   ActionIcon,
   Stack,
-  Divider
+  Divider,
+  Center
 } from '@mantine/core';
-import { IconDragDrop, IconPlus } from '@tabler/icons-react';
+import { IconDragDrop, IconPlus, IconPhoto } from '@tabler/icons-react';
 import { Asset } from '../types/models';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 
 interface AssetHotbarProps {
   assets: Asset[];
@@ -26,6 +26,7 @@ export const AssetHotbar: React.FC<AssetHotbarProps> = ({
 }) => {
   const [draggedAsset, setDraggedAsset] = useState<Asset | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const { addToken } = useMapStore();
 
   // Filter assets to show only image and token types
@@ -74,34 +75,25 @@ export const AssetHotbar: React.FC<AssetHotbarProps> = ({
       const x = e.clientX - canvasRect.left;
       const y = e.clientY - canvasRect.top;
 
-      // Create a token from the asset
-      const tokenId = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
       // Use token data if this is a token asset, otherwise use defaults
       const tokenAssetData = draggedAsset.tokenData;
-      const newToken = {
-        id: tokenId,
+      addToken({
         name: draggedAsset.name,
-        x: x,
-        y: y,
+        x,
+        y,
         rotation: tokenAssetData?.rotation || 0,
         size: tokenAssetData?.size || 1,
         sprite: draggedAsset.url,
-        hp: tokenAssetData?.hp || {
-          current: 100,
-          max: 100,
-          temporary: 0
-        },
+        hp: tokenAssetData?.hp || { current: 100, max: 100, temporary: 0 },
         states: tokenAssetData?.states || [],
         ownerId: tokenAssetData?.ownerId || 'gm_1',
         layerId: 'tokens',
         locked: tokenAssetData?.locked || false,
         visible: tokenAssetData?.visible !== false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      addToken(newToken);
+        imageScale: 1,
+        imageOffsetX: 0,
+        imageOffsetY: 0
+      });
       onAssetDrop(draggedAsset, { x, y });
     } catch (error) {
       console.error('Error creating token from asset:', error);
@@ -220,17 +212,55 @@ export const AssetHotbar: React.FC<AssetHotbarProps> = ({
                     }
                   }}
                 >
-                  <Image
-                    src={asset.thumbnail || asset.url}
-                    alt={asset.name}
-                    width={48}
-                    height={48}
-                    radius="sm"
-                    style={{
-                      flexShrink: 0,
-                      border: '1px solid #444'
-                    }}
-                  />
+                  {imageErrors.has(asset.id) ? (
+                    <Center
+                      w={48}
+                      h={48}
+                      style={{
+                        flexShrink: 0,
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)'
+                      }}
+                    >
+                      <IconPhoto size={24} color="#888" />
+                    </Center>
+                  ) : (
+                    <Box
+                      w={48}
+                      h={48}
+                      style={{
+                        flexShrink: 0,
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)'
+                      }}
+                    >
+                      <img
+                        src={asset.thumbnail || asset.url}
+                        alt={asset.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                        crossOrigin="anonymous"
+                        onError={() => {
+                          setImageErrors(prev => new Set(prev).add(asset.id));
+                          console.error('Failed to load image for asset:', asset.id, asset.name, {
+                            thumbnail: asset.thumbnail,
+                            url: asset.url
+                          });
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Asset image loaded successfully:', asset.id, asset.name);
+                        }}
+                      />
+                    </Box>
+                  )}
                   <Box style={{ flex: 1, minWidth: 0 }}>
                     <Text size="sm" c="white" truncate>
                       {asset.name}

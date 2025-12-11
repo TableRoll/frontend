@@ -49,7 +49,7 @@ import {
   IconDots
 } from '@tabler/icons-react';
 import { TokenLayerProps, Token, TokenMoveEvent, TokenSelectEvent, Point2D } from '../types/models';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 
 interface TokenComponentProps {
   token: Token;

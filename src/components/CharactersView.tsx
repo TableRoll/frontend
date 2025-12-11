@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Title,
@@ -28,14 +28,27 @@ import {
   IconAlertCircle,
   IconPhoto
 } from '@tabler/icons-react';
-import { useMapStore } from '../stores/mapStore';
+import { useMapStore } from '../stores/mapStoreWithAPI';
 import { Character, Asset } from '../types/models';
 import { CharacterCreator } from './CharacterCreator';
+import { notifications } from '@mantine/notifications';
 
 export const CharactersView: React.FC = () => {
-  const { characters, deleteCharacter, updateCharacter, addCharacter } = useMapStore();
+  const { characters, deleteCharacter, updateCharacter, addCharacter, loadCharacters, currentCampaign } = useMapStore();
   const [characterCreatorOpened, setCharacterCreatorOpened] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+
+  // Reload characters when component mounts or campaign changes
+  useEffect(() => {
+    const reloadCharacters = async () => {
+      try {
+        await loadCharacters(currentCampaign?.id);
+      } catch (error) {
+        console.error('Failed to load characters:', error);
+      }
+    };
+    reloadCharacters();
+  }, [loadCharacters, currentCampaign?.id]);
 
   const calculateModifier = (score: number): number => {
     return Math.floor((score - 10) / 2);
@@ -57,14 +70,20 @@ export const CharactersView: React.FC = () => {
     setCharacterCreatorOpened(true);
   };
 
-  const handleSaveCharacter = (character: Character) => {
-    if (editingCharacter) {
-      updateCharacter(editingCharacter.id, character);
-      setEditingCharacter(null);
-    } else {
-      addCharacter(character);
+  const handleSaveCharacter = async (character: Character) => {
+    try {
+      if (editingCharacter) {
+        await updateCharacter(editingCharacter.id, character);
+        setEditingCharacter(null);
+      } else {
+        await addCharacter(character);
+      }
+      // Reload characters to ensure the list is up to date
+      await loadCharacters(currentCampaign?.id);
+      setCharacterCreatorOpened(false);
+    } catch (error) {
+      console.error('Failed to save character:', error);
     }
-    setCharacterCreatorOpened(false);
   };
 
   const handleCloseCreator = () => {
@@ -72,46 +91,102 @@ export const CharactersView: React.FC = () => {
     setEditingCharacter(null);
   };
 
-  const handleCreateAssetFromCharacter = (character: Character) => {
-    const { addAsset } = useMapStore.getState();
+  const handleCreateAssetFromCharacter = async (character: Character) => {
+    const { uploadAsset, currentCampaign, loadAssets } = useMapStore.getState();
     
-    const asset: Asset = {
-      id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: `${character.name} Token`,
-      type: 'token',
-      url: character.avatar || '',
-      thumbnail: character.avatar || '',
-      size: 0,
-      uploadedAt: new Date(),
-      tokenData: {
-        hp: {
-          current: character.hp.current,
-          max: character.hp.max,
-          temporary: 0
-        },
-        states: [],
-        ownerId: character.id,
-        locked: false,
-        visible: true,
-        size: 1,
-        rotation: 0,
-        description: character.description,
-        ac: character.armorClass,
-        speed: character.speed,
-        modifiers: {
-          str: character.abilityScores?.strength ? Math.floor((character.abilityScores.strength - 10) / 2) : 0,
-          dex: character.abilityScores?.dexterity ? Math.floor((character.abilityScores.dexterity - 10) / 2) : 0,
-          con: character.abilityScores?.constitution ? Math.floor((character.abilityScores.constitution - 10) / 2) : 0,
-          int: character.abilityScores?.intelligence ? Math.floor((character.abilityScores.intelligence - 10) / 2) : 0,
-          wis: character.abilityScores?.wisdom ? Math.floor((character.abilityScores.wisdom - 10) / 2) : 0,
-          cha: character.abilityScores?.charisma ? Math.floor((character.abilityScores.charisma - 10) / 2) : 0
+    // Check if character has an avatar
+    if (!character.avatar) {
+      notifications.show({
+        title: 'No Avatar',
+        message: `Character ${character.name} has no avatar image. Please add an avatar image to create a token asset.`,
+        color: 'orange',
+        autoClose: 5000
+      });
+      return;
+    }
+
+    try {
+      let file: File;
+      const avatarUrl = character.avatar;
+
+      // Check if it's a data URL (starts with data:)
+      if (avatarUrl.startsWith('data:')) {
+        // Convert data URL to File
+        const response = await fetch(avatarUrl);
+        const blob = await response.blob();
+        file = new File([blob], `${character.name}_token.png`, { type: blob.type || 'image/png' });
+      } else {
+        // It's a regular URL - fetch it first, then convert to File
+        console.log('Fetching avatar from URL:', avatarUrl);
+        const response = await fetch(avatarUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch avatar image: ${response.status} ${response.statusText}`);
         }
+        const blob = await response.blob();
+        file = new File([blob], `${character.name}_token.png`, { type: blob.type || 'image/png' });
       }
-    };
-    
-    addAsset(asset);
-    // Show success notification
-    console.log(`Created asset from character: ${character.name}`);
+
+      console.log('Uploading asset from character:', character.name, 'File size:', file.size);
+
+      // Upload asset via API - this adds it to the store immediately
+      const uploadResult = await uploadAsset(file, {
+        name: `${character.name} Token`,
+        assetType: 'token',
+        campaignId: currentCampaign?.id,
+        isPublic: false
+      });
+
+      console.log('Asset uploaded successfully, result:', uploadResult);
+
+      // Small delay to ensure API has processed the upload
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Reload assets from API to ensure we have the latest data
+      await loadAssets(currentCampaign?.id);
+
+      // Verify the asset was added
+      const { assets: loadedAssets } = useMapStore.getState();
+      console.log('Loaded assets after upload:', loadedAssets.length, 'assets');
+      console.log('All asset names:', loadedAssets.map(a => `${a.name} (${a.type})`));
+      
+      const newAsset = loadedAssets.find(a => 
+        (a.name === `${character.name} Token` || a.name.includes(character.name)) && 
+        a.type === 'token'
+      );
+      
+      if (newAsset) {
+        notifications.show({
+          title: 'Asset Created',
+          message: `Token asset created for ${character.name}. It's now available in the Asset menu when GM mode is enabled.`,
+          color: 'green',
+          autoClose: 5000
+        });
+        console.log('✅ Asset created and verified:', {
+          id: newAsset.id,
+          name: newAsset.name,
+          type: newAsset.type,
+          hasUrl: !!newAsset.url,
+          hasThumbnail: !!newAsset.thumbnail
+        });
+      } else {
+        console.warn('⚠️ Asset uploaded but not found in store after reload');
+        console.warn('Available assets:', loadedAssets);
+        notifications.show({
+          title: 'Upload Complete',
+          message: `Token asset uploaded for ${character.name}. If it doesn't appear, try refreshing the page or check the Assets tab.`,
+          color: 'yellow',
+          autoClose: 5000
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to create asset from character:', error);
+      notifications.show({
+        title: 'Error',
+        message: `Failed to create asset from character: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        color: 'red',
+        autoClose: 5000
+      });
+    }
   };
 
   if (characters.length === 0) {

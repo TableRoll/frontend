@@ -46,3 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_campaigns_current_map ON campaigns(current_map_id
 
 
 
+
+
+
+
+
+
+
