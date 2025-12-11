@@ -51,7 +51,7 @@ export const DatabaseStatus: React.FC = () => {
     
     try {
       // First, try to fetch from the database stats endpoint (real database queries)
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+      const API_BASE_URL = process.env.REACT_APP_API_URL;
       const token = localStorage.getItem('authToken') || 'mock-token-for-development';
       
       try {
